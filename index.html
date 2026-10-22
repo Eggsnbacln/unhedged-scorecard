@@ -1,0 +1,1418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Unhedged Scorecard (unofficial)</title>
+<meta name="description" content="An unofficial scorecard of every Long/Short call on the FT Unhedged podcast: who called what, how it went, and the evidence.">
+<meta property="og:title" content="Unhedged Scorecard (unofficial)">
+<meta property="og:description" content="Every Long/Short call on FT Unhedged, judged with market data, search trends and dated events.">
+<style>
+:root{
+  --font-anthropic-sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  --font-anthropic-serif:Georgia,"Times New Roman",serif;
+  --cds-font-size-caption:.8125rem;--cds-font-size-heading:1.125rem;--cds-font-size-title:1.5rem;--cds-font-weight-medium:500;
+  --cds-gap-xs:.25rem;--cds-gap-sm:.5rem;--cds-gap-md:.75rem;--cds-gap-lg:1rem;--cds-gap-xl:1.75rem;
+  --cds-pad-xs:.375rem;--cds-pad-sm:.5rem;--cds-pad-md:.75rem;--cds-pad-lg:1.25rem;
+  --cds-radius:10px;--cds-shadow-popover:0 12px 32px rgba(51,48,46,.2);
+  --cds-dur-slow:400ms;--cds-ease-out:cubic-bezier(.2,.8,.2,1);
+}
+html,body{margin:0;background:#fff1e5}
+body{font-size:14px;-webkit-text-size-adjust:100%}
+*,*::before,*::after{box-sizing:border-box}
+img{max-width:100%}
+[hidden]{display:none!important}
+.dash-skeleton{color:transparent!important;background:linear-gradient(90deg,rgba(51,48,46,.06),rgba(51,48,46,.12),rgba(51,48,46,.06));background-size:200% 100%;border-radius:4px;animation:dash-sk 1.4s linear infinite}
+@keyframes dash-sk{to{background-position:-200% 0}}
+</style>
+</head>
+<body>
+<div id="dash-root">
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script>
+/* Stand-in for the claude.ai dashboard runtime: one JSON dataset, derived calcs, filters in the URL hash. */
+window.dash = (function () {
+  const calcs = {}, subs = [];
+  let calls = {status: 'loading'}, cache = {};
+  const readHash = () => Object.fromEntries(new URLSearchParams(location.hash.slice(1)));
+  let params = readHash();
+  const emit = () => { cache = {}; subs.forEach((f) => f()); };
+  fetch('unhedged_calls.json', {cache: 'no-cache'})
+    .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then((rows) => { calls = {status: 'ok', data: rows}; emit(); })
+    .catch(() => { calls = {status: 'error'}; emit(); });
+  window.addEventListener('hashchange', () => { params = readHash(); emit(); });
+  return {
+    calc(name, def) { calcs[name] = def; },
+    data(id) {
+      if (id === 'calls') return calls;
+      const def = calcs[id];
+      if (!def) return {status: 'missing'};
+      if (calls.status !== 'ok') return {status: calls.status};
+      if (!(id in cache)) {
+        try { cache[id] = {status: 'ok', data: def.fn(...def.inputs.map((i) => dash.data(i).data))}; }
+        catch (e) { console.error(id, e); cache[id] = {status: 'error'}; }
+      }
+      return cache[id];
+    },
+    onData(f) { subs.push(f); f(); },
+    params() { return params; },
+    setParams(p) {
+      params = Object.assign({}, params, p);
+      Object.keys(params).forEach((k) => { if (params[k] == null || params[k] === 'all') delete params[k]; });
+      const h = new URLSearchParams(params).toString();
+      history.replaceState(null, '', h ? '#' + h : location.pathname + location.search);
+      emit();
+    },
+  };
+})();
+</script>
+<style>
+/* Layout: masthead + ticker, host face-off, hall of fame/shame, doubling down/back threads, a 3D map panel, analysis cards, the ledger; call and profile panels open as dialogs.
+   Look: one deliberate FT-paper palette in both themes (salmon paper, ink text, claret/oxford/teal/velvet accents). */
+#dash-root{--dash-gutter:0}
+.uh{
+  --ft-paper:#fff1e5;--ft-wheat:#f2dfce;--ft-card:#fff7ef;--ft-ink:#33302e;--ft-ink-60:#66605c;--ft-ink-40:#999189;--ft-rule:#e6d9ce;--ft-rule-strong:#ccc1b7;
+  --ft-claret:#990f3d;--ft-oxford:#0f5499;--ft-teal:#0d7680;--ft-velvet:#593380;--ft-jade:#00804a;--ft-crimson:#cc0000;--ft-mandarin:#c25e00;
+  --color-bg:var(--ft-paper);--color-panel:var(--ft-card);--color-fg:var(--ft-ink);--color-fg-muted:var(--ft-ink-60);--color-border-line:var(--ft-rule);
+  --color-ok:var(--ft-jade);--color-bad:var(--ft-crimson);--color-warn:var(--ft-mandarin);
+  --cds-chart-grid:var(--ft-rule);--cds-chart-axis:var(--ft-ink-40);--cds-chart-reference:var(--ft-ink-40);--cds-chart-muted:var(--ft-ink-40);
+  --cds-surface-popover:var(--ft-card);--cds-border:var(--ft-rule-strong);--cds-text-secondary:var(--ft-ink-60);
+  color-scheme:light;background:var(--ft-paper);
+  padding-block:clamp(16px,3vw,36px);padding-left:max(16px,3vw,env(safe-area-inset-left,0px));padding-right:max(16px,3vw,env(safe-area-inset-right,0px));
+  display:grid;gap:var(--cds-gap-xl);font-family:var(--font-anthropic-sans);color:var(--color-fg);font-variant-numeric:tabular-nums}
+.uh-top{border-top:4px solid var(--ft-ink);padding-top:var(--cds-pad-md)}
+.uh-title{color:var(--ft-ink)}
+.uh h2,.uh h3{margin:0;font-weight:var(--cds-font-weight-medium);text-wrap:balance}
+.uh h2{font-size:var(--cds-font-size-heading)}
+.uh p{margin:0}
+.uh-kicker{font-size:var(--cds-font-size-caption);letter-spacing:.12em;text-transform:uppercase;color:var(--color-fg-muted)}
+.uh-top{display:flex;flex-wrap:wrap;gap:var(--cds-gap-md);align-items:flex-end;justify-content:space-between}
+.uh-top>div{min-width:0}
+.uh-title{font-family:var(--font-anthropic-serif);font-weight:400;font-size:calc(var(--cds-font-size-title)*1.7);line-height:1;margin:.2rem 0 0;letter-spacing:-.015em}
+.uh-take{margin-top:var(--cds-gap-sm)!important;max-width:64ch;color:var(--color-fg-muted)}
+.uh-take b{color:var(--color-fg);font-weight:500}
+.uh-stats{display:flex;flex-wrap:wrap;gap:.3rem 1.2rem;margin-top:var(--cds-gap-sm)!important;font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.uh-stats b{color:var(--color-fg);font-weight:500}
+.uh-chips{display:flex;flex-wrap:wrap;gap:var(--cds-gap-xs)}
+.uh-chip{font:inherit;font-size:var(--cds-font-size-caption);border:1px solid var(--color-border-line);background:var(--color-panel);color:var(--color-fg);border-radius:999px;padding:.32rem .8rem;cursor:pointer;display:inline-flex;gap:.45rem;align-items:center;white-space:nowrap}
+.uh-chip:hover{border-color:var(--color-fg-muted)}
+.uh :focus-visible{outline:2px solid var(--color-fg);outline-offset:2px}
+.uh-chip[aria-pressed="true"]{background:var(--color-fg);color:var(--color-bg);border-color:var(--color-fg)}
+.uh-chip i{width:.55rem;height:.55rem;border-radius:50%;display:inline-block;background:var(--sw)}
+.uh-chip.is-x::after{content:"×";opacity:.7}
+.uh-link{all:unset;cursor:pointer;color:inherit;text-decoration:underline;text-decoration-color:color-mix(in srgb,currentColor 35%,transparent);text-underline-offset:3px}
+.uh-link:hover{text-decoration-color:currentColor}
+
+/* ticker */
+.uh-ticker{overflow:hidden;border-block:1px solid var(--color-border-line);-webkit-mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent);mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent);min-height:2.4rem}
+.uh-ticker-track{display:flex;gap:1.6rem;width:max-content;padding:.45rem 0;font-size:var(--cds-font-size-caption);white-space:nowrap}
+.uh-tk{all:unset;cursor:pointer;display:inline-flex;gap:.45rem;align-items:baseline;padding:.15rem .5rem;border-radius:999px}
+.uh-tk:hover,.uh-tk:focus-visible{background:color-mix(in srgb,var(--color-fg) 7%,transparent)}
+.uh-tk .who{color:var(--color-fg-muted);text-transform:uppercase;letter-spacing:.08em}
+.uh-tk .arrow{font-size:.7em}
+@media (prefers-reduced-motion:no-preference){.uh-ticker-track.is-live{animation:uh-tick 120s linear infinite}.uh-ticker:hover .uh-ticker-track,.uh-ticker:focus-within .uh-ticker-track{animation-play-state:paused}}
+@keyframes uh-tick{to{transform:translateX(-50%)}}
+
+/* verdict colours */
+.v-win{color:var(--color-ok)}.v-loss{color:var(--color-bad)}.v-partial{color:var(--color-warn)}.v-unclear,.v-undeterminable{color:var(--color-fg-muted)}
+.uh-v{display:inline-block;padding:.08rem .55rem;border-radius:999px;text-transform:capitalize;font-weight:500;white-space:nowrap;background:color-mix(in srgb,currentColor 13%,transparent)}
+
+/* face-off */
+.uh-vs{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:var(--cds-gap-md);align-items:stretch}
+.uh-vs-mid{display:grid;place-items:center;font-family:var(--font-anthropic-serif);font-size:calc(var(--cds-font-size-title)*1.4);color:var(--color-fg-muted);font-style:italic}
+.uh-room{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));gap:var(--cds-gap-md)}
+@media (max-width:760px){.uh-vs{grid-template-columns:minmax(0,1fr)}.uh-vs-mid{display:none}}
+.uh-host{position:relative;overflow:hidden;min-width:0;display:grid;gap:var(--cds-gap-sm);align-content:start;padding:var(--cds-pad-lg);border:1px solid var(--color-border-line);border-radius:var(--cds-radius);background:radial-gradient(120% 70% at 105% -10%,color-mix(in srgb,var(--host) 16%,transparent),transparent 62%),var(--color-panel);cursor:pointer;transition:border-color var(--cds-dur-slow)}
+.uh-host:hover{border-color:color-mix(in srgb,var(--host) 60%,var(--color-border-line))}
+.uh-host.is-dim{opacity:.45}
+.uh-host-h{display:flex;justify-content:space-between;gap:var(--cds-gap-sm);align-items:flex-start}
+.uh-host-h .acts{display:flex;gap:.35rem;flex-wrap:wrap;justify-content:flex-end}
+.uh-host h3{font-size:var(--cds-font-size-heading)}
+.uh-host h3 .uh-link{text-decoration:none}
+.uh-host h3 .uh-link::after{content:" →";color:var(--color-fg-muted)}
+.uh-big{display:flex;align-items:baseline;gap:.4rem;flex-wrap:wrap}
+.uh-big b{font-family:var(--font-anthropic-serif);font-weight:400;font-size:calc(var(--cds-font-size-title)*3.1);line-height:.85;letter-spacing:-.03em;color:var(--host)}
+.uh-host.is-small .uh-big b{font-size:calc(var(--cds-font-size-title)*2)}
+.uh-big .uh-unit,.uh-unit{color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}
+.uh-rec,.uh-sub,.uh-edge{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.uh-rec span,.uh-sub span,.uh-edge b,.uh-edge span{color:var(--color-fg);font-weight:500}
+.uh-form{display:flex;gap:4px;min-height:1.5rem;align-items:center;flex-wrap:wrap}
+.uh-form-l{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);margin-right:.35rem}
+.uh-fd{all:unset;cursor:pointer;width:1.35rem;height:1.35rem;border-radius:4px;display:grid;place-items:center;font-size:.7rem;font-weight:600;color:var(--color-bg)}
+.uh-fd:hover{transform:translateY(-1px);box-shadow:0 0 0 2px var(--color-panel),0 0 0 3px var(--color-fg)}
+.uh-fd.f-win{background:var(--color-ok)}.uh-fd.f-loss{background:var(--color-bad)}.uh-fd.f-partial{background:var(--color-warn)}
+.uh-split{display:grid;gap:.35rem}
+.uh-split-row{display:grid;grid-template-columns:7.2rem minmax(0,1fr) 3rem;gap:.6rem;align-items:center;font-size:var(--cds-font-size-caption)}
+.uh-split-l{color:var(--color-fg-muted)}
+.uh-split-v{text-align:right}
+.uh-bar{position:relative;height:.5rem;border-radius:999px;background:color-mix(in srgb,var(--color-fg) 9%,transparent)}
+.uh-bar i{position:absolute;inset:0 auto 0 0;border-radius:999px;background:var(--host);width:0}
+.uh-bar em{position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--color-fg-muted);opacity:.6}
+@media (prefers-reduced-motion:no-preference){.uh-bar i{transition:width var(--cds-dur-slow) var(--cds-ease-out)}}
+
+/* hall of fame / shame */
+.uh-hall{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,26rem),1fr));gap:var(--cds-gap-lg)}
+.uh-hall-col{display:grid;gap:var(--cds-gap-sm);align-content:start;min-width:0}
+.uh-hall-col h2{font-family:var(--font-anthropic-serif);font-weight:400;font-size:var(--cds-font-size-title)}
+.uh-hall-list{display:grid;gap:.5rem}
+.uh-plaque{all:unset;cursor:pointer;display:grid;grid-template-columns:5.2rem minmax(0,1fr);gap:.9rem;align-items:center;padding:.75rem .9rem;border-radius:var(--cds-radius);border:1px solid color-mix(in srgb,var(--tone) 30%,var(--color-border-line));background:linear-gradient(100deg,color-mix(in srgb,var(--tone) 12%,var(--color-panel)),var(--color-panel) 55%)}
+.uh-plaque:hover{border-color:var(--tone)}
+.uh-plaque .fig{font-family:var(--font-anthropic-serif);font-size:calc(var(--cds-font-size-title)*1.25);line-height:1;color:var(--tone);text-align:center}
+.uh-plaque .fig small{display:block;font-family:var(--font-anthropic-sans);font-size:.65rem;letter-spacing:.08em;text-transform:uppercase;color:var(--color-fg-muted);margin-top:.25rem}
+.uh-plaque .who{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.uh-plaque .what{font-weight:500}
+.uh-plaque .line{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);margin-top:.15rem}
+
+/* doubling down / doubling back / butting heads */
+.uh-thr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,21rem),1fr));gap:var(--cds-gap-md)}
+.uh-thr{--tone:var(--ft-oxford);display:grid;gap:.55rem;align-content:start;min-width:0;padding:var(--cds-pad-md);border-radius:var(--cds-radius);border:1px solid var(--color-border-line);border-top:3px solid var(--tone);background:linear-gradient(180deg,color-mix(in srgb,var(--tone) 7%,var(--color-bg)),var(--color-bg) 6rem)}
+.uh-thr.k-back{--tone:var(--ft-velvet)}.uh-thr.k-heads{--tone:var(--ft-claret)}
+.uh-thr .k{font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--tone);font-weight:500}
+.uh-thr h3{font-family:var(--font-anthropic-serif);font-weight:400;font-size:var(--cds-font-size-heading);line-height:1.2}
+.uh-thr p{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);line-height:1.45}
+.uh-thr ol{list-style:none;margin:0;padding:0 0 0 .9rem;border-left:2px solid color-mix(in srgb,var(--tone) 30%,transparent);display:grid;gap:.15rem}
+.uh-thr li{position:relative}
+.uh-thr li::before{content:"";position:absolute;left:calc(-.9rem - 5px);top:.95rem;width:8px;height:8px;border-radius:50%;background:var(--tone)}
+.uh-thr-call{all:unset;cursor:pointer;box-sizing:border-box;width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.5rem;align-items:center;padding:.35rem .5rem;border-radius:6px;font-size:var(--cds-font-size-caption)}
+.uh-thr-call:hover{background:color-mix(in srgb,var(--color-fg) 6%,transparent)}
+.uh-thr-call .when{display:block;color:var(--color-fg-muted);font-size:.7rem;letter-spacing:.03em}
+.uh-thr-call .dir{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--tone);margin-right:.3rem}
+.uh-thr-more{justify-self:center}
+.uh-fame .uh-people{margin-top:.45rem}
+
+/* map panel (FT wheat) */
+.uh-lab{--lab-bg:var(--ft-wheat);--lab-fg:var(--ft-ink);--lab-muted:var(--ft-ink-60);--lab-line:var(--ft-rule-strong);position:relative;overflow:hidden;border-radius:var(--cds-radius);border:1px solid var(--ft-rule-strong);background:radial-gradient(90% 80% at 50% 45%,var(--ft-paper) 0%,var(--ft-wheat) 75%);color:var(--lab-fg);padding:var(--cds-pad-lg);display:grid;gap:var(--cds-gap-md)}
+.uh-lab .uh-kicker{color:var(--lab-muted)}
+.uh-lab-h{display:flex;flex-wrap:wrap;justify-content:space-between;gap:var(--cds-gap-sm);align-items:flex-end}
+.uh-lab-h p{color:var(--lab-muted);font-size:var(--cds-font-size-caption);max-width:62ch;margin-top:.3rem}
+.uh-lab-ctl{display:flex;gap:.35rem;flex-wrap:wrap}
+.uh-lab-ctl button{font:inherit;font-size:var(--cds-font-size-caption);color:var(--lab-fg);background:var(--ft-card);border:1px solid var(--lab-line);border-radius:999px;padding:.3rem .75rem;cursor:pointer}
+.uh-lab-ctl button[aria-pressed="true"]{background:var(--lab-fg);color:var(--lab-bg)}
+.uh-lab :focus-visible{outline-color:var(--lab-fg)}
+.uh-map{position:relative;height:clamp(400px,64vw,660px);touch-action:pan-y;cursor:grab;border-radius:calc(var(--cds-radius) - 2px)}
+.uh-map.is-drag{cursor:grabbing}
+.uh-map.is-point{cursor:pointer}
+.uh-map canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.uh-lab-legend{display:flex;flex-wrap:wrap;gap:.4rem 1.4rem;font-size:var(--cds-font-size-caption);color:var(--lab-muted);align-items:center}
+.uh-ramp{display:inline-block;width:7rem;height:.45rem;border-radius:999px;background:linear-gradient(90deg,#cc0000,#e08a2e,#00994d);vertical-align:middle;margin:0 .4rem}
+.uh-ring{display:inline-block;width:.8rem;height:.8rem;border-radius:50%;border:1.5px solid var(--lab-fg);vertical-align:-2px;margin-right:.35rem;opacity:.7}
+.uh-labtip{position:absolute;pointer-events:none;z-index:2;background:var(--ft-card);border:1px solid var(--lab-line);border-radius:var(--cds-radius);padding:var(--cds-pad-xs) var(--cds-pad-sm);font-size:var(--cds-font-size-caption);color:var(--lab-fg);max-width:17rem;box-shadow:0 6px 18px rgba(51,48,46,.18)}
+.uh-labtip small{display:block;color:var(--lab-muted)}
+
+/* cards */
+.uh-card{background:var(--color-panel);border:1px solid var(--color-border-line);border-radius:var(--cds-radius);padding:var(--cds-pad-lg);display:grid;gap:var(--cds-gap-sm);min-width:0;align-content:start;position:relative}
+.uh-card-h{display:flex;flex-wrap:wrap;justify-content:space-between;gap:var(--cds-gap-sm);align-items:flex-start}
+.uh-note{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);max-width:68ch}
+.uh-seg{display:inline-flex;border:1px solid var(--color-border-line);border-radius:999px;padding:2px;gap:2px;flex-wrap:wrap}
+.uh-seg button{font:inherit;font-size:var(--cds-font-size-caption);border:0;background:transparent;color:var(--color-fg-muted);padding:.25rem .7rem;border-radius:999px;cursor:pointer}
+.uh-seg button[aria-pressed="true"]{background:var(--color-fg);color:var(--color-bg)}
+.uh-grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,24rem),1fr));gap:var(--cds-gap-md)}
+.uh-chart{position:relative;min-height:320px}
+.uh-chart.is-small{min-height:230px}
+.uh-chart svg{display:block;overflow:visible}
+.uh-tip{position:absolute;pointer-events:none;z-index:3;background:var(--cds-surface-popover);border:1px solid var(--cds-border);border-radius:var(--cds-radius);box-shadow:var(--cds-shadow-popover);padding:var(--cds-pad-xs) var(--cds-pad-sm);font-size:var(--cds-font-size-caption);min-width:9rem;max-width:18rem}
+.uh-tip .d{color:var(--cds-text-secondary);display:block;margin-bottom:.15rem}
+.uh-tip .r{display:flex;gap:.45rem;align-items:center;justify-content:space-between}
+.uh-tip .r i{width:.55rem;height:.55rem;border-radius:2px;display:inline-block}
+
+/* heatmap */
+.uh-heat-box{overflow-x:auto}
+.uh-heat{display:grid;gap:3px;min-width:max-content;font-size:var(--cds-font-size-caption)}
+.uh-heat .hh{color:var(--color-fg-muted);padding:.2rem .25rem;display:flex;align-items:flex-end;line-height:1.15;max-width:6rem}
+.uh-heat .hh[role="button"]{cursor:pointer}
+.uh-heat .hh.is-on{color:var(--color-fg);font-weight:500}
+.uh-heat .rh{all:unset;cursor:pointer;display:flex;align-items:center;gap:.45rem;padding-right:.6rem;white-space:nowrap}
+.uh-heat .rh:hover{text-decoration:underline}
+.uh-heat .rh i{width:.55rem;height:.55rem;border-radius:50%;background:var(--sw)}
+.uh-heat .c{min-width:3.6rem;height:3.1rem;border-radius:6px;display:grid;place-content:center;text-align:center;line-height:1.1;background:color-mix(in srgb,var(--color-fg) 4%,transparent)}
+.uh-heat .c b{font-weight:500}
+.uh-heat .c small{color:var(--color-fg-muted);font-size:.68rem}
+.uh-heat .c.is-thin{color:var(--color-fg-muted)}
+.uh-heat .is-row-on{outline:1.5px solid var(--color-fg);outline-offset:-1.5px}
+
+/* bars list (bench, topics) */
+.uh-bars{display:grid;gap:.3rem;max-height:30rem;overflow:auto;padding-right:.3rem}
+.uh-barrow{all:unset;display:grid;grid-template-columns:minmax(0,11rem) minmax(0,1fr) 6rem;gap:.6rem;align-items:center;font-size:var(--cds-font-size-caption);padding:.2rem .3rem;border-radius:6px}
+button.uh-barrow{cursor:pointer}
+button.uh-barrow:hover,.uh-barrow.is-on{background:color-mix(in srgb,var(--color-fg) 6%,transparent)}
+.uh-barrow .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.uh-barrow .bar{height:.6rem;border-radius:999px;position:relative;background:color-mix(in srgb,var(--color-fg) 8%,transparent)}
+.uh-barrow .bar i{position:absolute;inset:0 auto 0 0;border-radius:999px;opacity:.8}
+.uh-barrow .bar em{position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--color-fg-muted);opacity:.6}
+.uh-barrow .val{text-align:right;color:var(--color-fg-muted)}
+
+/* tables */
+.uh-tools{display:flex;flex-wrap:wrap;gap:var(--cds-gap-sm);align-items:center}
+.uh-tools input,.uh-tools select{font:inherit;font-size:var(--cds-font-size-caption);color:var(--color-fg);background:var(--color-bg);border:1px solid var(--color-border-line);border-radius:999px;padding:.38rem .8rem}
+.uh-tools input{min-width:0;flex:1 1 14rem}
+.uh-tablebox{max-height:32rem;overflow:auto;border:1px solid var(--color-border-line);border-radius:var(--cds-radius)}
+.uh-table{width:100%;border-collapse:collapse;font-size:var(--cds-font-size-caption)}
+.uh-table th{position:sticky;top:0;z-index:1;background:var(--color-panel);text-align:left;font-weight:500;color:var(--color-fg-muted);padding:.5rem .6rem;border-bottom:1px solid var(--color-border-line);white-space:nowrap}
+.uh-dlg .uh-table th{background:var(--color-bg)}
+.uh-table th button{all:unset;cursor:pointer}
+.uh-table th[aria-sort="ascending"] button::after{content:" ↑"}.uh-table th[aria-sort="descending"] button::after{content:" ↓"}
+.uh-table td{padding:.5rem .6rem;border-top:1px solid var(--color-border-line);vertical-align:top}
+.uh-table tbody tr{cursor:pointer}
+.uh-table tbody tr:hover td{background:color-mix(in srgb,var(--color-fg) 4%,transparent)}
+.uh-table tbody tr:focus-visible{outline:2px solid var(--color-fg);outline-offset:-2px}
+.uh-table tr:first-child td{border-top:0}
+.uh-table td.num{text-align:right;white-space:nowrap}
+.uh-table td.ev{max-width:34ch;color:var(--color-fg-muted)}
+.uh-table td.ev span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.uh-table td.sub{font-weight:500}
+.uh-table .dir{text-transform:uppercase;font-size:.7rem;letter-spacing:.06em;color:var(--color-fg-muted)}
+@media (max-width:700px){.uh-hide-sm{display:none}}
+.uh-count{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted)}
+.uh-foot{font-size:var(--cds-font-size-caption);color:var(--color-fg-muted);max-width:80ch;display:grid;gap:.4rem}
+.uh-failed{display:flex;align-items:center;justify-content:center;gap:.5rem;color:var(--color-fg-muted);font-size:var(--cds-font-size-caption);min-height:6rem}
+.uh-failed::before{content:"";width:.375rem;height:.375rem;border-radius:50%;background:var(--color-bad)}
+[data-dash-source-state="refreshing"]{opacity:.5;transition:opacity var(--cds-dur-slow)}
+[data-dash-source-state="empty"]{color:transparent}
+
+/* dialogs */
+.uh-dlg{border:1px solid var(--color-border-line);border-radius:calc(var(--cds-radius) + 6px);background:var(--color-bg);color:var(--color-fg);padding:0;width:min(44rem,calc(100vw - 1.5rem));max-height:calc(100dvh - 1.5rem);box-shadow:var(--cds-shadow-popover);font-family:var(--font-anthropic-sans);font-variant-numeric:tabular-nums;overscroll-behavior:contain}
+.uh-dlg.is-wide{width:min(70rem,calc(100vw - 1.5rem))}
+.uh-dlg::backdrop{background:rgba(6,9,14,.55);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+@media (prefers-reduced-motion:no-preference){.uh-dlg[open]{animation:uh-pop var(--cds-dur-slow) var(--cds-ease-out)}}
+@keyframes uh-pop{from{transform:translateY(10px) scale(.985);opacity:.6}}
+.uh-dlg-h{position:sticky;top:0;z-index:4;display:flex;justify-content:space-between;gap:var(--cds-gap-sm);align-items:flex-start;background:var(--color-bg);padding:var(--cds-pad-lg) var(--cds-pad-lg) var(--cds-pad-sm);border-bottom:1px solid var(--color-border-line)}
+.uh-dlg-h h2:focus{outline:none}
+.uh-dlg-h h2{font-family:var(--font-anthropic-serif);font-weight:400;font-size:var(--cds-font-size-title);line-height:1.15;margin-top:.2rem}
+.uh-dlg-h .acts{display:flex;gap:.35rem;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end}
+.uh-x{font:inherit;width:2rem;height:2rem;border-radius:50%;border:1px solid var(--color-border-line);background:var(--color-panel);color:var(--color-fg);cursor:pointer;display:grid;place-items:center}
+.uh-x:disabled{opacity:.35;cursor:default}
+.uh-dlg-b{display:grid;gap:var(--cds-gap-lg);padding:var(--cds-pad-lg)}
+.uh-fame{padding:.6rem .85rem;border-radius:var(--cds-radius);font-size:var(--cds-font-size-caption);background:color-mix(in srgb,var(--tone) 12%,transparent);border:1px solid color-mix(in srgb,var(--tone) 35%,transparent)}
+.uh-fame b{color:var(--tone);text-transform:uppercase;letter-spacing:.1em;font-size:.7rem;display:block;margin-bottom:.15rem}
+.uh-verdict{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--cds-gap-md);align-items:center;padding:var(--cds-pad-md);border-radius:var(--cds-radius);background:color-mix(in srgb,currentColor 9%,var(--color-bg))}
+.uh-verdict .big{font-family:var(--font-anthropic-serif);font-size:calc(var(--cds-font-size-title)*1.6);text-transform:capitalize;line-height:1}
+.uh-verdict p{color:var(--color-fg);font-size:var(--cds-font-size-caption)}
+.uh-verdict p+p{color:var(--color-fg-muted);margin-top:.2rem}
+.uh-facts{display:grid;grid-template-columns:minmax(8rem,max-content) minmax(0,1fr);gap:.55rem 1.2rem;margin:0;font-size:var(--cds-font-size-caption)}
+.uh-facts dt{color:var(--color-fg-muted)}
+.uh-facts dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.uh-facts a{color:inherit}
+.uh-sec h3{font-size:var(--cds-font-size-caption);text-transform:uppercase;letter-spacing:.1em;color:var(--color-fg-muted);font-weight:500;margin-bottom:.5rem}
+.uh-prose{max-width:66ch;line-height:1.55}
+.uh-prose+.uh-prose{margin-top:.6rem!important;color:var(--color-fg-muted)}
+.uh-srcs{display:grid;gap:.4rem;padding:0;margin:0;list-style:none}
+.uh-srcs a{display:flex;justify-content:space-between;gap:1rem;padding:.55rem .75rem;border:1px solid var(--color-border-line);border-radius:var(--cds-radius);color:inherit;text-decoration:none;font-size:var(--cds-font-size-caption)}
+.uh-srcs a:hover{border-color:var(--color-fg-muted);background:var(--color-panel)}
+.uh-srcs a small{color:var(--color-fg-muted);white-space:nowrap}
+.uh-rets{display:grid;grid-template-columns:repeat(auto-fit,minmax(6rem,1fr));gap:var(--cds-gap-sm)}
+.uh-rets div{padding:.6rem .75rem;border:1px solid var(--color-border-line);border-radius:var(--cds-radius);display:grid;gap:.15rem}
+.uh-rets small{color:var(--color-fg-muted);font-size:var(--cds-font-size-caption)}
+.uh-rets b{font-size:var(--cds-font-size-heading);font-weight:500}
+.uh-pf-hero{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr));gap:var(--cds-gap-md);align-items:end}
+.uh-pf-big{font-family:var(--font-anthropic-serif);font-size:calc(var(--cds-font-size-title)*3.2);line-height:.85;color:var(--host)}
+.uh-pf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));gap:var(--cds-gap-md)}
+.uh-calllist{display:grid;gap:.3rem;list-style:none;margin:0;padding:0}
+.uh-calllist button{all:unset;cursor:pointer;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.6rem;align-items:center;padding:.45rem .6rem;border-radius:var(--cds-radius);border:1px solid var(--color-border-line);font-size:var(--cds-font-size-caption)}
+.uh-calllist button:hover{background:var(--color-panel)}
+.uh-calllist .when{color:var(--color-fg-muted);display:block}
+.uh-people{display:flex;flex-wrap:wrap;gap:.35rem}
+</style>
+
+<div class="uh" id="uh">
+  <header class="uh-top" id="top">
+    <div>
+      <p class="uh-kicker">An unofficial tracker of FT Unhedged's Long/Short</p>
+      <h1 class="uh-title">Unhedged Scorecard</h1>
+      <p class="uh-take" id="takeaway">Katie Martin's judged calls hit <b data-source="cohorts" data-field="hit" data-where="cohort=katie" class="dash-skeleton">—</b>% of the time, Rob Armstrong's <b data-source="cohorts" data-field="hit" data-where="cohort=rob" class="dash-skeleton">—</b>% and guests' <b data-source="cohorts" data-field="hit" data-where="cohort=guests" class="dash-skeleton">—</b>%. <span class="uh-lead"></span> Click any call, card or name to dig in.</p>
+      <p class="uh-stats"><span><b data-source="totals" data-field="calls">—</b> calls</span><span><b data-source="totals" data-field="judged">—</b> judged</span><span><b data-source="totals" data-field="open">—</b> still open</span><span><b data-source="totals" data-field="speakers">—</b> voices</span><span>since <b data-source="totals" data-field="first_date">—</b></span></p>
+    </div>
+    <div class="uh-chips" id="who" role="group" aria-label="Focus on"></div>
+  </header>
+
+  <div class="uh-ticker" id="ticker" data-source="calls" aria-label="Latest verdicts"><div class="uh-ticker-track"></div></div>
+
+  <section id="faceoff" class="uh-vs" aria-label="Katie versus Rob"></section>
+  <section id="room" class="uh-room" aria-label="Everyone else"></section>
+
+  <section id="hall" class="uh-hall" data-source="calls" aria-label="Biggest hits and misses">
+    <div class="uh-hall-col" id="hall-hit"><div><p class="uh-kicker">Hall of fame</p><h2>The biggest hits</h2></div><div class="uh-hall-list"></div></div>
+    <div class="uh-hall-col" id="hall-miss"><div><p class="uh-kicker">Hall of shame</p><h2>The biggest misses</h2></div><div class="uh-hall-list"></div></div>
+  </section>
+
+  <section class="uh-card" id="threads" data-source="calls" aria-label="Doubling down, doubling back, butting heads">
+    <div class="uh-card-h">
+      <div>
+        <p class="uh-kicker">Second opinions</p>
+        <h2>Doubling down, doubling back, butting heads</h2>
+        <p class="uh-note">When someone repeats a call, reverses one, or takes the other side of a colleague's. Oldest call first; click any call for its evidence.</p>
+      </div>
+      <div class="uh-seg" id="thr-kind" role="group" aria-label="Show"></div>
+    </div>
+    <div class="uh-thr-grid"></div>
+    <button type="button" class="uh-chip uh-thr-more" id="thr-more" hidden></button>
+  </section>
+
+  <section class="uh-lab" id="map" aria-label="Neural map">
+    <div class="uh-lab-h">
+      <div>
+        <p class="uh-kicker">The neural map</p>
+        <h2>Who bets on what, and how it goes</h2>
+        <p>Glowing nodes are speakers, sized by how many calls they made; rings are topics. Each strand joins a speaker to a topic they bet on, coloured by their hit rate there. Drag to spin, pinch to zoom, hover to inspect. Click a speaker for their profile, or a topic to filter the page.</p>
+      </div>
+      <div class="uh-lab-ctl">
+        <button type="button" id="lab-spin" aria-pressed="true">Spin</button>
+        <button type="button" id="lab-in" aria-label="Zoom in">+</button>
+        <button type="button" id="lab-out" aria-label="Zoom out">−</button>
+        <button type="button" id="lab-reset">Reset view</button>
+      </div>
+    </div>
+    <div class="uh-map" id="lab-map" data-source="edges people"><canvas aria-label="3D network of speakers and topics" role="img"></canvas><div class="uh-labtip" hidden></div></div>
+    <div class="uh-lab-legend"><span>Hit rate<span class="uh-ramp"></span>20% → 80%</span><span><span class="uh-ring"></span>Topic</span><span>Thicker strand = more calls</span><span>Grey = nothing judged yet</span></div>
+  </section>
+
+  <section class="uh-card" id="longrun">
+    <div class="uh-card-h">
+      <div><h2>The long run</h2><p class="uh-note" id="longrun-note">Running record of judged calls, in the order they were made.</p></div>
+      <div class="uh-seg" role="group" aria-label="Measure"><button type="button" data-mode="net" aria-pressed="true">Wins minus losses</button><button type="button" data-mode="hit" aria-pressed="false">Hit rate so far</button></div>
+    </div>
+    <div class="uh-chart dash-skeleton" id="longrun-chart" data-source="timeline"></div>
+  </section>
+
+  <div class="uh-grid2">
+    <section class="uh-card" id="edge">
+      <div class="uh-card-h">
+        <div><h2>Where the edge is</h2><p class="uh-note">Hit rate by group and subject. Green beats a coin toss, red trails it; faded cells have fewer than three judged calls. Click a topic to filter, or a group for its profile.</p></div>
+        <div class="uh-seg" role="group" aria-label="Group by"><button type="button" data-dim="topic" aria-pressed="true">Topic</button><button type="button" data-dim="asset" aria-pressed="false">What they bet on</button></div>
+      </div>
+      <div class="uh-heat-box"><div class="uh-heat dash-skeleton" id="edge-grid" data-source="theme_grid"></div></div>
+    </section>
+    <section class="uh-card" id="bench">
+      <div class="uh-card-h"><div><h2>The bench</h2><p class="uh-note">Guests and former co-hosts with at least two judged calls, ranked by hit rate. Click a name for their profile.</p></div></div>
+      <div class="uh-bars dash-skeleton" id="bench-list" data-source="people"></div>
+    </section>
+  </div>
+
+  <section class="uh-card" id="open">
+    <div class="uh-card-h"><div><h2>Open positions</h2><p class="uh-note">Calls that aren't final yet, scored as of the last price pull. Market calls settle a year after they're made; trend calls after 180 days.</p></div><span class="uh-count" id="open-count"></span></div>
+    <div class="uh-tablebox"><table class="uh-table" id="open-table" data-source="calls" data-row-key="id">
+      <thead><tr><th data-field="final_on">Settles</th><th data-field="speaker">Who</th><th data-field="direction" class="uh-hide-sm">Side</th><th data-field="subject">Call</th><th data-field="preliminary">So far</th><th data-field="ret_now" class="num">Return to date</th><th data-field="date" class="uh-hide-sm">Made</th></tr></thead>
+      <tbody></tbody></table></div>
+  </section>
+
+  <section class="uh-card" id="ledger">
+    <div class="uh-card-h"><div><h2>The ledger</h2><p class="uh-note">Every call. Click one to see when it was made, how it was judged and the evidence behind it.</p></div><span class="uh-count" id="ledger-count"></span></div>
+    <div class="uh-tools">
+      <input id="uh-q" type="search" placeholder="Search calls, people, evidence" aria-label="Search the ledger">
+      <select id="uh-status" aria-label="Status"><option value="">Any status</option><option value="decided">Decided</option><option value="preliminary">Still open</option><option value="pending">Too early</option></select>
+      <select id="uh-verdict" aria-label="Verdict"><option value="">Any verdict</option><option value="win">Win</option><option value="loss">Loss</option><option value="partial">Partial</option><option value="unclear">Unclear</option><option value="undeterminable">Undeterminable</option></select>
+    </div>
+    <div class="uh-tablebox"><table class="uh-table" id="ledger-table" data-source="calls" data-row-key="id">
+      <thead><tr><th data-field="date"><button type="button" data-sort="date">Date</button></th><th data-field="speaker"><button type="button" data-sort="speaker">Who</button></th><th data-field="direction" class="uh-hide-sm"><button type="button" data-sort="direction">Side</button></th><th data-field="subject"><button type="button" data-sort="subject">Call</button></th><th data-field="asset_label" class="uh-hide-sm"><button type="button" data-sort="asset_label">Kind</button></th><th data-field="verdict"><button type="button" data-sort="verdict">Verdict</button></th><th data-field="notes" class="uh-hide-sm">Why</th></tr></thead>
+      <tbody></tbody></table></div>
+  </section>
+
+  <footer class="uh-foot" id="method">
+    <p><b>How it's scored.</b> Hit rate counts a win as 1, a partial as ½ and a loss as 0, over judged calls only. Most jokes and unfalsifiable vibes are marked unclear or undeterminable and left out, but some were judged a win or a loss in spirit by the author, and those count. Market calls are scored on price a year after the call; trend and attention calls on the 180 days after it, adjusted for seasonality; the rest on dated, sourced events. Only evidence from after a call counts.</p>
+    <p>Verdicts come from the Unhedged tracker: automated market and search-trend evidence, pre-judgments by Claude, and the author's own rulings. The hall of fame and shame, and the doubling-down, doubling-back and butting-heads threads, are hand-picked.</p>
+    <p><b>Unofficial.</b> A fan project, not affiliated with or endorsed by the Financial Times. Calls are summarised from the podcast; listen to Unhedged on FT.com for the real thing.</p>
+  </footer>
+
+  <dialog class="uh-dlg is-wide" id="profile" aria-labelledby="pf-title">
+    <div class="uh-dlg-h"><div><p class="uh-kicker" id="pf-kicker"></p><h2 id="pf-title" tabindex="-1" autofocus></h2></div><div class="acts"><button type="button" class="uh-chip" id="pf-focus">Focus the page</button><button type="button" class="uh-x" data-close aria-label="Close">×</button></div></div>
+    <div class="uh-dlg-b" id="pf-body"></div>
+  </dialog>
+  <dialog class="uh-dlg" id="call" aria-labelledby="cl-title">
+    <div class="uh-dlg-h"><div><p class="uh-kicker" id="cl-kicker"></p><h2 id="cl-title" tabindex="-1" autofocus></h2></div><div class="acts"><button type="button" class="uh-x" id="cl-prev" aria-label="Previous call">‹</button><button type="button" class="uh-x" id="cl-next" aria-label="Next call">›</button><button type="button" class="uh-x" data-close aria-label="Close">×</button></div></div>
+    <div class="uh-dlg-b" id="cl-body"></div>
+  </dialog>
+</div>
+
+<script>
+dash.calc('cohorts', {
+  title: 'Record by host and group',
+  description: 'Judged calls per host, the former co-hosts and guests, scored win 1, partial ½, loss 0; hit rates in whole percent.',
+  inputs: ['calls'],
+  fn: (calls) => {
+    const score = {win: 1, partial: 0.5, loss: 0};
+    const groupOf = (c) => c.speaker === 'Katie Martin' ? 'katie' : c.speaker === 'Robert Armstrong' ? 'rob' : c.role === 'team' ? 'team' : c.role === 'guest' ? 'guests' : null;
+    const hit = (list) => { const g = list.filter((c) => c.verdict in score); return g.length ? Math.round(100 * g.reduce((s, c) => s + score[c.verdict], 0) / g.length) : null; };
+    return ['katie', 'rob', 'team', 'guests'].map((cohort) => {
+      const mine = calls.filter((c) => groupOf(c) === cohort);
+      const graded = mine.filter((c) => c.verdict in score);
+      const byTopic = {};
+      graded.forEach((c) => { (byTopic[c.theme_label] ||= []).push(c); });
+      const ranked = Object.entries(byTopic).filter(([, list]) => list.length >= 4).map(([topic, list]) => ({topic, h: hit(list)})).sort((a, b) => b.h - a.h);
+      return {
+        cohort, calls: mine.length, judged: graded.length,
+        wins: graded.filter((c) => c.verdict === 'win').length,
+        losses: graded.filter((c) => c.verdict === 'loss').length,
+        partials: graded.filter((c) => c.verdict === 'partial').length,
+        hit: hit(mine), markets: hit(mine.filter((c) => c.financial)), vibes: hit(mine.filter((c) => !c.financial)),
+        long: hit(mine.filter((c) => c.direction === 'long')), short: hit(mine.filter((c) => c.direction === 'short')),
+        open: mine.filter((c) => c.status === 'preliminary').length,
+        first_date: mine.reduce((m, c) => (c.date < m ? c.date : m), mine.length ? mine[0].date : null),
+        last_date: mine.reduce((m, c) => (c.date > m ? c.date : m), mine.length ? mine[0].date : null),
+        best_theme: ranked.length ? ranked[0].topic : null, best_hit: ranked.length ? ranked[0].h : null,
+        worst_theme: ranked.length > 1 ? ranked[ranked.length - 1].topic : null, worst_hit: ranked.length > 1 ? ranked[ranked.length - 1].h : null,
+      };
+    });
+  },
+});
+dash.calc('timeline', {
+  title: 'Running record over time',
+  description: 'For each group, every judged call in date order with the running wins-minus-losses and hit rate so far.',
+  inputs: ['calls'],
+  fn: (calls) => {
+    const score = {win: 1, partial: 0.5, loss: 0};
+    const groupOf = (c) => c.speaker === 'Katie Martin' ? 'katie' : c.speaker === 'Robert Armstrong' ? 'rob' : c.role === 'team' ? 'team' : c.role === 'guest' ? 'guests' : null;
+    const rows = [];
+    for (const cohort of ['katie', 'rob', 'team', 'guests']) {
+      const list = calls.filter((c) => groupOf(c) === cohort && c.verdict in score).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+      let net = 0, points = 0;
+      list.forEach((c, i) => {
+        net += c.verdict === 'win' ? 1 : c.verdict === 'loss' ? -1 : 0;
+        points += score[c.verdict];
+        rows.push({cohort, id: c.id, date: c.date, n: i + 1, net, hit: Math.round(1000 * points / (i + 1)) / 10, subject: c.subject, verdict: c.verdict, speaker: c.speaker});
+      });
+    }
+    return rows;
+  },
+});
+dash.calc('speaker_timeline', {
+  title: 'Running record by speaker',
+  description: 'For each named speaker, every judged call in date order with the running wins-minus-losses and hit rate so far.',
+  inputs: ['calls'],
+  fn: (calls) => {
+    const score = {win: 1, partial: 0.5, loss: 0};
+    const by = {};
+    calls.filter((c) => c.role !== 'unattributed' && c.verdict in score).sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)).forEach((c) => {
+      const s = by[c.speaker] ||= {net: 0, points: 0, n: 0, rows: []};
+      s.n += 1; s.net += c.verdict === 'win' ? 1 : c.verdict === 'loss' ? -1 : 0; s.points += score[c.verdict];
+      s.rows.push({speaker: c.speaker, id: c.id, date: c.date, n: s.n, net: s.net, hit: Math.round(1000 * s.points / s.n) / 10, subject: c.subject, verdict: c.verdict});
+    });
+    return Object.values(by).flatMap((s) => s.rows);
+  },
+});
+dash.calc('theme_grid', {
+  title: 'Hit rate by group and subject',
+  description: 'Calls, judged calls and hit rate for each group by topic and by kind of thing bet on.',
+  inputs: ['calls'],
+  fn: (calls) => {
+    const score = {win: 1, partial: 0.5, loss: 0};
+    const groupOf = (c) => c.speaker === 'Katie Martin' ? 'katie' : c.speaker === 'Robert Armstrong' ? 'rob' : c.role === 'team' ? 'team' : c.role === 'guest' ? 'guests' : null;
+    const cells = {};
+    for (const c of calls) {
+      const cohort = groupOf(c);
+      if (!cohort) continue;
+      for (const [dim, key] of [['topic', c.theme_label], ['asset', c.asset_label]]) {
+        const cell = cells[cohort + '|' + dim + '|' + key] ||= {cohort, dim, key, calls: 0, judged: 0, points: 0};
+        cell.calls += 1;
+        if (c.verdict in score) { cell.judged += 1; cell.points += score[c.verdict]; }
+      }
+    }
+    return Object.values(cells).map((c) => ({cohort: c.cohort, dim: c.dim, key: c.key, calls: c.calls, judged: c.judged, hit: c.judged ? Math.round(100 * c.points / c.judged) : null}));
+  },
+});
+dash.calc('people', {
+  title: 'Record by speaker',
+  description: 'For every named speaker: calls, judged calls, wins, losses, partials, hit rate overall and split by markets, other calls, longs and shorts, open calls and their strongest and weakest topics.',
+  inputs: ['calls'],
+  fn: (calls) => {
+    const score = {win: 1, partial: 0.5, loss: 0};
+    const hit = (list) => { const g = list.filter((c) => c.verdict in score); return g.length ? Math.round(100 * g.reduce((s, c) => s + score[c.verdict], 0) / g.length) : null; };
+    const by = {};
+    for (const c of calls) if (c.role !== 'unattributed') (by[c.speaker] ||= []).push(c);
+    return Object.entries(by).map(([speaker, mine]) => {
+      const graded = mine.filter((c) => c.verdict in score);
+      const byTopic = {};
+      graded.forEach((c) => { (byTopic[c.theme_label] ||= []).push(c); });
+      const ranked = Object.entries(byTopic).filter(([, list]) => list.length >= 2).map(([topic, list]) => ({topic, h: hit(list)})).sort((a, b) => b.h - a.h);
+      return {
+        speaker, role: mine[0].role, calls: mine.length, judged: graded.length,
+        wins: graded.filter((c) => c.verdict === 'win').length, losses: graded.filter((c) => c.verdict === 'loss').length,
+        partials: graded.filter((c) => c.verdict === 'partial').length, hit: hit(mine),
+        markets: hit(mine.filter((c) => c.financial)), vibes: hit(mine.filter((c) => !c.financial)),
+        long: hit(mine.filter((c) => c.direction === 'long')), short: hit(mine.filter((c) => c.direction === 'short')),
+        open: mine.filter((c) => c.status === 'preliminary').length,
+        first_date: mine.reduce((m, c) => (c.date < m ? c.date : m), mine[0].date),
+        last_date: mine.reduce((m, c) => (c.date > m ? c.date : m), mine[0].date),
+        best_theme: ranked.length ? ranked[0].topic : null, best_hit: ranked.length ? ranked[0].h : null,
+        worst_theme: ranked.length > 1 ? ranked[ranked.length - 1].topic : null, worst_hit: ranked.length > 1 ? ranked[ranked.length - 1].h : null,
+      };
+    });
+  },
+});
+dash.calc('edges', {
+  title: 'Speaker–topic links',
+  description: 'For each named speaker and topic: calls, judged calls and hit rate. These are the strands on the neural map and the topic bars in each profile.',
+  inputs: ['calls'],
+  fn: (calls) => {
+    const score = {win: 1, partial: 0.5, loss: 0};
+    const by = {};
+    for (const c of calls) {
+      if (c.role === 'unattributed') continue;
+      const e = by[c.speaker + '|' + c.theme_label] ||= {speaker: c.speaker, topic: c.theme_label, calls: 0, judged: 0, points: 0};
+      e.calls += 1;
+      if (c.verdict in score) { e.judged += 1; e.points += score[c.verdict]; }
+    }
+    return Object.values(by).map((e) => ({speaker: e.speaker, topic: e.topic, calls: e.calls, judged: e.judged, hit: e.judged ? Math.round(100 * e.points / e.judged) : null}));
+  },
+});
+dash.calc('totals', {
+  title: 'Overall counts',
+  description: 'Calls made, calls judged (win, loss or partial), calls still open, named speakers and the first call date.',
+  inputs: ['calls'],
+  fn: (calls) => [{
+    calls: calls.length,
+    judged: calls.filter((c) => c.verdict === 'win' || c.verdict === 'loss' || c.verdict === 'partial').length,
+    open: calls.filter((c) => c.status === 'preliminary').length,
+    speakers: new Set(calls.filter((c) => c.role !== 'unattributed').map((c) => c.speaker)).size,
+    first_date: calls.reduce((m, c) => (c.date < m ? c.date : m), calls[0] ? calls[0].date : ''),
+  }],
+});
+</script>
+
+<script>
+(function () {
+  const $ = (s, el = document) => el.querySelector(s);
+  const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
+  const el = (tag, props = {}, ...kids) => { const n = Object.assign(document.createElement(tag), props); n.append(...kids.filter((k) => k != null && k !== '')); return n; };
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const COH = [
+    {id: 'katie', name: 'Katie Martin', short: 'Katie', person: 'Katie Martin', ci: 0, role: 'Host'},
+    {id: 'rob', name: 'Rob Armstrong', short: 'Rob', person: 'Robert Armstrong', ci: 1, role: 'Host'},
+    {id: 'team', name: 'Ethan Wu & Aiden Reiter', short: 'Former co-hosts', ci: 2, role: 'Former co-hosts'},
+    {id: 'guests', name: 'Guests', short: 'Guests', ci: 3, role: 'Everyone else'},
+  ];
+  const cohById = Object.fromEntries(COH.map((c) => [c.id, c]));
+  const FT_COLORS = ['#c8336a', '#2a6ebb', '#0f8a6b', '#b8621b'];
+  const colorOf = (id) => FT_COLORS[cohById[id].ci];
+  const groupOf = (r) => r.speaker === 'Katie Martin' ? 'katie' : r.speaker === 'Robert Armstrong' ? 'rob' : r.role === 'team' ? 'team' : r.role === 'guest' ? 'guests' : null;
+  const parse = d3.utcParse('%Y-%m-%d');
+  const fmtDay = (s) => (s ? d3.utcFormat('%-d %b %Y')(parse(String(s).slice(0, 10))) : '');
+  const fmtRet = d3.format('+.2f');
+  const GRADED = new Set(['win', 'loss', 'partial']);
+  const firstName = (s) => (s === 'Robert Armstrong' ? 'Rob' : s.split(' ')[0]);
+  const roleLabel = (r) => (r === 'host' ? 'Host' : r === 'team' ? 'Former co-host' : r === 'guest' ? 'Guest' : 'Speaker unknown');
+  const enc = (v) => encodeURIComponent(v);
+  const domain = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } };
+  const ret = (c) => (c.ret_1y != null ? c.ret_1y : c.ret_now != null ? c.ret_now : null);
+  let DATA = {calls: [], idx: new Map()};
+
+  /* ---------- filters ---------- */
+  const params = () => ({who: dash.params().who || 'all', topic: dash.params().topic || null});
+  const matchesWho = (r, who) => (who === 'all' ? true : cohById[who] ? groupOf(r) === who : r.speaker === who);
+  function drawChips() {
+    const {who, topic} = params();
+    const chips = [{id: 'all', label: 'Everyone'}, ...COH.map((c) => ({id: c.id, label: c.short, sw: colorOf(c.id)}))];
+    const nodes = chips.map((c) => {
+      const b = el('button', {type: 'button', className: 'uh-chip'});
+      b.setAttribute('aria-pressed', String(who === c.id));
+      if (c.sw) { const i = el('i'); i.style.setProperty('--sw', c.sw); b.append(i); }
+      b.append(c.label);
+      b.addEventListener('click', () => dash.setParams({who: c.id}));
+      return b;
+    });
+    for (const [on, label, clear] of [[!cohById[who] && who !== 'all', who, {who: 'all'}], [!!topic, topic, {topic: null}]]) {
+      if (!on) continue;
+      const b = el('button', {type: 'button', className: 'uh-chip is-x', textContent: label + ' '});
+      b.setAttribute('aria-pressed', 'true');
+      b.addEventListener('click', () => dash.setParams(clear));
+      nodes.push(b);
+    }
+    $('#who').replaceChildren(...nodes);
+  }
+
+  /* ---------- marks ---------- */
+  function fillMarks(scope, source, rows, keyCol) {
+    $$(`[data-source="${source}"][data-field]`, scope).forEach((m) => {
+      if (m.closest('table') || m.closest('dialog')) return;
+      const where = m.dataset.where ? new URLSearchParams(m.dataset.where) : null;
+      const row = where ? rows.find((r) => String(r[keyCol]) === where.get(keyCol)) : rows[0];
+      let v = row ? row[m.dataset.field] : null;
+      if (v != null && m.dataset.field.endsWith('date')) v = d3.utcFormat('%b %Y')(parse(v));
+      m.textContent = v == null ? '—' : String(v);
+      m.classList.remove('dash-skeleton');
+    });
+  }
+  const failed = (box) => { box.classList.remove('dash-skeleton'); box.replaceChildren(el('div', {className: 'uh-failed', textContent: 'Failed to load'})); };
+  const mark = (tag, source, field, where, text, cls) => {
+    const n = el(tag, {className: cls || ''});
+    n.dataset.source = source; n.dataset.field = field;
+    if (where != null) { if (typeof where === 'number') n.dataset.row = where; else n.dataset.where = where; }
+    n.textContent = text == null ? '—' : String(text);
+    return n;
+  };
+  function callButton(r, cls, content, listName) {
+    const b = el('button', {type: 'button', className: cls});
+    b.append(...content);
+    b.addEventListener('click', (e) => { e.stopPropagation(); openCall(r.id, listName); });
+    return b;
+  }
+
+  /* ---------- face-off cards ---------- */
+  function cardHTML(c, small) {
+    const m = (f) => `data-source="cohorts" data-field="${f}" data-where="cohort=${c.id}"`;
+    const split = [['markets', 'Markets'], ['vibes', 'Everything else'], ['long', 'Going long'], ['short', 'Going short']]
+      .map(([f, l]) => `<div class="uh-split-row"><span class="uh-split-l">${l}</span><span class="uh-bar"><i data-bar="${f}"></i><em></em></span><span class="uh-split-v"><span ${m(f)}>—</span>%</span></div>`).join('');
+    return `<article class="uh-host${small ? ' is-small' : ''}" id="card-${c.id}" data-card="${c.id}" style="--host:${FT_COLORS[c.ci]}">
+      <div class="uh-host-h"><div><p class="uh-kicker">${c.role}</p><h3><button type="button" class="uh-link" data-profile="${c.id}">${c.name}</button></h3></div><div class="acts"><button type="button" class="uh-chip" data-who="${c.id}" aria-pressed="false">Focus</button></div></div>
+      <div class="uh-big"><b ${m('hit')} class="dash-skeleton">—</b><span class="uh-unit">% hit rate</span></div>
+      <p class="uh-rec"><span ${m('wins')}>—</span> won · <span ${m('losses')}>—</span> lost · <span ${m('partials')}>—</span> partial</p>
+      <p class="uh-sub"><span ${m('judged')}>—</span> judged of <span ${m('calls')}>—</span> calls · <span ${m('open')}>—</span> still open</p>
+      <div class="uh-form" data-source="timeline" aria-label="Last ten judged calls"></div>
+      <div class="uh-split">${split}</div>
+      <p class="uh-edge">Strongest on <b ${m('best_theme')}>—</b> (<span ${m('best_hit')}>—</span>%), weakest on <b ${m('worst_theme')}>—</b> (<span ${m('worst_hit')}>—</span>%)</p>
+    </article>`;
+  }
+  $('#faceoff').innerHTML = cardHTML(COH[0]) + '<div class="uh-vs-mid" aria-hidden="true">vs</div>' + cardHTML(COH[1]);
+  $('#room').innerHTML = cardHTML(COH[2], true) + cardHTML(COH[3], true);
+  $$('.uh-host').forEach((card) => card.addEventListener('click', (e) => {
+    const who = e.target.closest('[data-who]');
+    if (who) { dash.setParams({who: params().who === who.dataset.who ? 'all' : who.dataset.who}); return; }
+    if (e.target.closest('.uh-fd')) return;
+    openProfile(card.dataset.card);
+  }));
+  function drawCards(cohorts, timeline) {
+    const {who} = params();
+    for (const c of COH) {
+      const card = $('#card-' + c.id), row = cohorts.find((r) => r.cohort === c.id) || {};
+      card.classList.toggle('is-dim', who !== 'all' && !!cohById[who] && who !== c.id);
+      $('[data-who]', card).setAttribute('aria-pressed', String(who === c.id));
+      $$('[data-bar]', card).forEach((i) => { const v = row[i.dataset.bar]; i.style.width = v == null ? '0' : v + '%'; });
+      const last = timeline.filter((r) => r.cohort === c.id).slice(-10);
+      navList['form-' + c.id] = last.map((r) => r.id);
+      $('.uh-form', card).replaceChildren(el('span', {className: 'uh-form-l', textContent: 'Form'}), ...last.map((r) => {
+        const b = callButton(r, 'uh-fd f-' + r.verdict, [r.verdict === 'win' ? 'W' : r.verdict === 'loss' ? 'L' : '½'], 'form-' + c.id);
+        b.setAttribute('aria-label', `${r.verdict}: ${r.subject}, ${fmtDay(r.date)}`); b.title = `${r.subject} · ${fmtDay(r.date)}`;
+        return b;
+      }));
+    }
+  }
+
+  /* ---------- ticker ---------- */
+  function drawTicker(calls) {
+    const latest = calls.filter((r) => r.status === 'decided' && GRADED.has(r.verdict) && r.role !== 'unattributed').sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 20);
+    navList.ticker = latest.map((r) => r.id);
+    const make = (r, hidden) => {
+      const b = callButton(r, 'uh-tk', [
+        el('span', {className: 'who', textContent: firstName(r.speaker)}),
+        el('span', {className: 'arrow v-' + r.verdict, textContent: r.direction === 'long' ? '▲' : '▼'}),
+        document.createTextNode(`${r.direction} ${r.subject}`),
+        el('b', {className: 'uh-v v-' + r.verdict, textContent: r.verdict}),
+      ], 'ticker');
+      if (hidden) { b.setAttribute('aria-hidden', 'true'); b.tabIndex = -1; }
+      return b;
+    };
+    const track = $('.uh-ticker-track');
+    track.replaceChildren(...latest.map((r) => make(r)), ...latest.map((r) => make(r, true)));
+    track.classList.add('is-live');
+  }
+
+  /* ---------- hall of fame / shame ---------- */
+  function drawHall(calls) {
+    const {who, topic} = params();
+    for (const [kind, box, tone] of [['hit', '#hall-hit', 'var(--color-ok)'], ['miss', '#hall-miss', 'var(--color-bad)']]) {
+      const rows = calls.filter((c) => c.fame === kind && matchesWho(c, who) && (!topic || c.theme_label === topic))
+        .sort((a, b) => Math.abs(ret(b) ?? 0) - Math.abs(ret(a) ?? 0) || (a.date < b.date ? 1 : -1));
+      navList['hall-' + kind] = rows.map((r) => r.id);
+      const list = $('.uh-hall-list', $(box));
+      if (!rows.length) { list.replaceChildren(el('p', {className: 'uh-note', textContent: 'Nothing in here for this filter.'})); continue; }
+      list.replaceChildren(...rows.map((r) => {
+        const fig = ret(r) != null ? el('div', {className: 'fig'}, fmtRet(ret(r)).replace(/\.\d+$/, '') + '%', el('small', {textContent: r.ret_1y != null ? 'one year' : 'to date'}))
+          : el('div', {className: 'fig'}, r.direction === 'long' ? '▲' : '▼', el('small', {textContent: r.verdict}));
+        const b = callButton(r, 'uh-plaque', [fig, el('div', {},
+          el('div', {className: 'who', textContent: `${r.speaker} · ${fmtDay(r.date)}`}),
+          el('div', {className: 'what', textContent: `${r.direction} ${r.subject}`}),
+          el('div', {className: 'line', textContent: r.fame_line || ''}))], 'hall-' + kind);
+        b.style.setProperty('--tone', tone);
+        return b;
+      }));
+    }
+  }
+
+  /* ---------- doubling down / doubling back / butting heads ---------- */
+  const KIND = {down: 'Doubling down', back: 'Doubling back', heads: 'Butting heads'};
+  const KIND_TONE = {down: 'var(--ft-oxford)', back: 'var(--ft-velvet)', heads: 'var(--ft-claret)'};
+  const pill = (c) => el('span', {className: 'uh-v v-' + (c.verdict || c.preliminary || 'unclear'), textContent: c.verdict || (c.preliminary ? c.preliminary + ' so far' : 'pending')});
+  let thrKind = 'all', thrAll = false;
+  function threadsOf(calls) {
+    const by = new Map();
+    for (const c of calls) if (c.thread_id) { if (!by.has(c.thread_id)) by.set(c.thread_id, []); by.get(c.thread_id).push(c); }
+    return [...by.values()].map((cs) => ({id: cs[0].thread_id, kind: cs[0].thread_kind, title: cs[0].thread_title, line: cs[0].thread_line,
+      order: cs[0].thread_order, calls: cs.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))})).sort((a, b) => a.order - b.order);
+  }
+  function drawThreads(calls) {
+    const {who, topic} = params();
+    const all = threadsOf(calls).filter((t) => t.calls.some((c) => matchesWho(c, who) && (!topic || c.theme_label === topic)));
+    $('#thr-kind').replaceChildren(...[['all', 'All'], ...Object.entries(KIND)].map(([k, l]) => {
+      const b = el('button', {type: 'button', textContent: `${l} ${k === 'all' ? all.length : all.filter((t) => t.kind === k).length}`});
+      b.setAttribute('aria-pressed', String(thrKind === k));
+      b.addEventListener('click', () => { thrKind = k; thrAll = false; drawThreads(DATA.calls); });
+      return b;
+    }));
+    const rows = all.filter((t) => thrKind === 'all' || t.kind === thrKind), more = $('#thr-more');
+    more.hidden = rows.length <= 6;
+    more.textContent = thrAll ? 'Show fewer' : `Show all ${rows.length}`;
+    if (!rows.length) { $('.uh-thr-grid').replaceChildren(el('p', {className: 'uh-note', textContent: 'Nothing in here for this filter.'})); return; }
+    $('.uh-thr-grid').replaceChildren(...(thrAll ? rows : rows.slice(0, 6)).map((t) => {
+      const list = 'thr-' + t.id;
+      navList[list] = t.calls.map((c) => c.id);
+      return el('article', {className: 'uh-thr k-' + t.kind},
+        el('span', {className: 'k', textContent: KIND[t.kind]}),
+        el('h3', {textContent: t.title}),
+        el('p', {textContent: t.line}),
+        el('ol', {}, ...t.calls.map((c) => el('li', {}, callButton(c, 'uh-thr-call', [
+          el('span', {}, el('span', {className: 'when', textContent: `${fmtDay(c.date)} · ${c.role === 'unattributed' ? 'Someone' : c.speaker}`}),
+            el('span', {className: 'dir', textContent: c.direction}), c.subject),
+          pill(c)], list)))));
+    }));
+  }
+  $('#thr-more').addEventListener('click', () => { thrAll = !thrAll; drawThreads(DATA.calls); });
+
+  /* ---------- line chart (shared by the long run and profiles) ---------- */
+  function lineChart(box, series, mode, opts = {}) {
+    box.classList.remove('dash-skeleton');
+    const width = box.clientWidth || 600, height = opts.height || 340;
+    const all = series.flatMap((s) => s.pts);
+    if (!all.length) { box.replaceChildren(el('p', {className: 'uh-note', textContent: 'Nothing judged yet.'})); return; }
+    const yv = (p) => (mode === 'net' ? p.net : p.hit);
+    const x0 = d3.min(all, (p) => p.d), x1 = d3.max(all, (p) => p.d);
+    const svg = d3.create('svg').attr('width', '100%').attr('viewBox', `0 0 ${width} ${height}`).attr('role', 'img').attr('aria-label', opts.label || 'Running record');
+    box.append(svg.node());
+    const probe = svg.append('text').attr('font-size', 12).attr('visibility', 'hidden');
+    const measure = (t) => { probe.text(t); return probe.node().getComputedTextLength(); };
+    const y = d3.scaleLinear(mode === 'net' ? d3.extent([0, ...all.map(yv)]) : [0, 100], [height - 30, 14]).nice();
+    const ticks = y.ticks(height < 260 ? 4 : 6);
+    const fmtY = (v) => (mode === 'net' ? (v > 0 ? '+' : '') + v : v + '%');
+    const left = Math.ceil(d3.max(ticks, (t) => measure(fmtY(t)))) + 10;
+    const ends = series.map((s) => { const p = s.pts[s.pts.length - 1]; return {s, p, label: `${s.label} ${mode === 'net' ? (p.net > 0 ? '+' : '') + p.net : p.hit + '%'}`}; });
+    const right = Math.ceil(d3.max(ends, (e) => measure(e.label))) + 14;
+    svg.node().remove(); probe.remove();
+    const x = d3.scaleUtc([x0, x1 > x0 ? x1 : d3.utcDay.offset(x0, 30)], [left, width - right]);
+    svg.append('g').selectAll('line').data(ticks).join('line').attr('x1', left).attr('x2', width - right).attr('y1', y).attr('y2', y).attr('stroke', 'var(--cds-chart-grid)');
+    svg.append('g').selectAll('text').data(ticks).join('text').attr('x', left - 8).attr('y', y).attr('dy', '0.32em').attr('text-anchor', 'end').attr('fill', 'var(--color-fg-muted)').attr('font-size', 12).text(fmtY);
+    const ref = mode === 'net' ? 0 : 50;
+    svg.append('line').attr('x1', left).attr('x2', width - right).attr('y1', y(ref)).attr('y2', y(ref)).attr('stroke', 'var(--cds-chart-reference)').attr('stroke-dasharray', '4 4');
+    const xt = x.ticks(Math.max(2, Math.floor((width - left - right) / 110)));
+    svg.append('g').selectAll('text').data(xt).join('text').attr('x', x).attr('y', height - 8).attr('text-anchor', 'middle').attr('fill', 'var(--color-fg-muted)').attr('font-size', 12).text(d3.utcFormat('%b %Y'));
+    const rule = svg.append('line').attr('y1', 14).attr('y2', height - 30).attr('stroke', 'var(--cds-chart-axis)').attr('visibility', 'hidden').attr('pointer-events', 'none');
+    svg.append('rect').attr('x', left).attr('y', 0).attr('width', Math.max(0, width - left - right)).attr('height', height - 24).attr('fill', 'transparent');
+    const line = d3.line().x((p) => x(p.d)).y((p) => y(yv(p))).curve(d3.curveStepAfter);
+    for (const s of series) {
+      svg.append('path').datum(s.pts).attr('d', line).attr('fill', 'none').attr('stroke', s.color).attr('stroke-width', s.width || 2.25).attr('pointer-events', 'none')
+        .attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('opacity', s.dim ? 0.18 : 1).attr('stroke-dasharray', s.dash || null);
+    }
+    if (opts.dots) {
+      svg.append('g').selectAll('circle').data(series[0].pts).join('circle').attr('cx', (p) => x(p.d)).attr('cy', (p) => y(yv(p))).attr('r', 3.4)
+        .attr('fill', (p) => (p.verdict === 'win' ? 'var(--color-ok)' : p.verdict === 'loss' ? 'var(--color-bad)' : 'var(--color-warn)')).attr('stroke', 'var(--color-bg)').attr('stroke-width', 1).style('cursor', 'pointer')
+        .on('click', (ev, p) => openCall(p.id, 'profile-run'));
+      navList['profile-run'] = series[0].pts.map((p) => p.id);
+    }
+    ends.sort((a, b) => y(yv(a.p)) - y(yv(b.p)));
+    let lastY = -Infinity;
+    for (const e of ends) {
+      const ty = Math.max(y(yv(e.p)), lastY + 15); lastY = ty;
+      if (!opts.dots) svg.append('circle').attr('cx', x(e.p.d)).attr('cy', y(yv(e.p))).attr('r', 3.5).attr('fill', e.s.color).attr('opacity', e.s.dim ? 0.25 : 1);
+      svg.append('text').attr('x', x(e.p.d) + 8).attr('y', ty).attr('dy', '0.32em').attr('font-size', 12).attr('fill', 'var(--color-fg)').attr('opacity', e.s.dim ? 0.35 : 1).text(e.label);
+    }
+    const tip = el('div', {className: 'uh-tip'}); tip.hidden = true;
+    const bis = d3.bisector((p) => p.d).right;
+    svg.on('pointermove', (ev) => {
+      const [mx] = d3.pointer(ev, svg.node()); const d = x.invert(mx);
+      rule.attr('x1', x(d)).attr('x2', x(d)).attr('visibility', 'visible');
+      const lines = series.map((s) => { const i = bis(s.pts, d) - 1; return i >= 0 ? {s, p: s.pts[i]} : null; }).filter(Boolean);
+      tip.replaceChildren(el('span', {className: 'd', textContent: d3.utcFormat('%-d %b %Y')(d)}), ...lines.map(({s, p}) => {
+        const i = el('i'); i.style.background = s.color;
+        return el('div', {className: 'r'}, el('span', {}, i, ' ' + s.label), el('b', {textContent: mode === 'net' ? `${p.net > 0 ? '+' : ''}${p.net} (${p.n})` : `${p.hit}% (${p.n})`}));
+      }), lines.length === 1 ? el('span', {className: 'd', textContent: `Latest: ${lines[0].p.subject} · ${lines[0].p.verdict}`}) : null);
+      tip.hidden = false;
+      const bw = box.clientWidth, px = (x(d) / width) * bw;
+      tip.style.left = Math.min(Math.max(px + 12, 0), bw - tip.offsetWidth - 4) + 'px'; tip.style.top = '8px';
+    }).on('pointerleave', () => { rule.attr('visibility', 'hidden'); tip.hidden = true; });
+    box.replaceChildren(svg.node(), tip);
+  }
+
+  /* ---------- long run ---------- */
+  let longMode = 'net';
+  $$('#longrun [data-mode]').forEach((b) => b.addEventListener('click', () => {
+    longMode = b.dataset.mode;
+    $$('#longrun [data-mode]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    $('#longrun-note').textContent = longMode === 'net' ? 'Running record of judged calls, in the order they were made.' : 'Hit rate to date, counting every judged call made up to each point.';
+    render();
+  }));
+  function drawLongRun(rows) {
+    const {who} = params();
+    const series = COH.map((c) => ({
+      label: c.short, color: colorOf(c.id), width: c.id === 'katie' || c.id === 'rob' ? 2.5 : 1.75, dash: c.id === 'guests' ? '5 4' : null,
+      dim: who !== 'all' && !!cohById[who] && who !== c.id,
+      pts: rows.filter((r) => r.cohort === c.id).map((r) => ({...r, d: parse(r.date)})),
+    })).filter((s) => s.pts.length);
+    lineChart($('#longrun-chart'), series, longMode, {label: 'Running record by group'});
+  }
+
+  /* ---------- edge heatmap ---------- */
+  let heatDim = 'topic';
+  $$('#edge [data-dim]').forEach((b) => b.addEventListener('click', () => {
+    heatDim = b.dataset.dim; $$('#edge [data-dim]').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); render();
+  }));
+  function drawHeat(grid) {
+    const box = $('#edge-grid'); box.classList.remove('dash-skeleton');
+    const {who, topic} = params();
+    const cells = grid.filter((g) => g.dim === heatDim);
+    const totals = d3.rollup(cells, (v) => d3.sum(v, (c) => c.judged), (c) => c.key);
+    const keys = Array.from(totals).filter(([, n]) => n >= 4).sort((a, b) => b[1] - a[1]).map(([k]) => k);
+    box.style.gridTemplateColumns = `max-content repeat(${keys.length}, minmax(3.6rem, 1fr))`;
+    const out = [el('div')];
+    for (const k of keys) {
+      const h = el('div', {className: 'hh' + (topic === k ? ' is-on' : ''), textContent: k});
+      if (heatDim === 'topic') {
+        h.setAttribute('role', 'button'); h.tabIndex = 0;
+        const go = () => dash.setParams({topic: topic === k ? null : k});
+        h.addEventListener('click', go); h.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+      }
+      out.push(h);
+    }
+    for (const c of COH) {
+      const i = el('i'); i.style.setProperty('--sw', colorOf(c.id));
+      const rh = el('button', {type: 'button', className: 'rh'}, i, c.short); rh.addEventListener('click', () => openProfile(c.id)); out.push(rh);
+      for (const k of keys) {
+        const cell = cells.find((g) => g.cohort === c.id && g.key === k);
+        const d = el('div', {className: 'c'});
+        if (who === c.id) d.classList.add('is-row-on');
+        if (!cell || cell.judged < 3 || cell.hit == null) {
+          d.classList.add('is-thin'); d.textContent = cell && cell.hit != null ? cell.hit + '%' : '·';
+          if (cell && cell.hit != null) d.style.opacity = 0.55;
+        } else {
+          const a = Math.round(Math.min(78, 8 + Math.abs(cell.hit - 50) * 1.6));
+          d.style.background = `color-mix(in srgb, var(${cell.hit >= 50 ? '--color-ok' : '--color-bad'}) ${a}%, transparent)`;
+          d.append(el('b', {textContent: cell.hit + '%'}), el('small', {textContent: cell.judged + ' judged'}));
+        }
+        if (cell) d.setAttribute('aria-label', `${c.short}, ${k}: ${cell.judged} judged${cell.hit != null ? ', ' + cell.hit + '% hit rate' : ''}`);
+        out.push(d);
+      }
+    }
+    box.replaceChildren(...out);
+  }
+
+  /* ---------- bars ---------- */
+  function barRow(name, hit, right, onClick, on) {
+    const fill = el('i'); fill.style.width = (hit ?? 0) + '%'; fill.style.background = hit == null ? 'var(--color-fg-muted)' : hit >= 50 ? 'var(--color-ok)' : 'var(--color-bad)';
+    const row = el(onClick ? 'button' : 'div', {className: 'uh-barrow' + (on ? ' is-on' : '')},
+      el('span', {className: 'nm', textContent: name}), el('span', {className: 'bar'}, fill, el('em')), el('span', {className: 'val', textContent: right}));
+    if (onClick) { row.type = 'button'; row.addEventListener('click', onClick); }
+    return row;
+  }
+  function drawBench(people) {
+    const box = $('#bench-list'); box.classList.remove('dash-skeleton');
+    const {who} = params();
+    const list = people.filter((p) => p.role !== 'host' && p.judged >= 2).sort((a, b) => b.hit - a.hit || b.judged - a.judged);
+    box.replaceChildren(...list.map((p) => barRow(p.speaker + (p.role === 'team' ? ' · co-host' : ''), p.hit, `${p.hit}% · ${p.wins}–${p.losses}${p.partials ? '–' + p.partials : ''}`, () => openProfile(p.speaker), who === p.speaker)));
+  }
+
+  /* ---------- tables ---------- */
+  const navList = {};
+  const td = (text, cls) => { const c = el('td', {className: cls || ''}); if (text != null) c.textContent = text; return c; };
+  const verdictCell = (v) => { const c = td(); if (v) c.append(el('span', {className: 'uh-v v-' + v, textContent: v})); return c; };
+  function clickableRow(r, list) {
+    const tr = el('tr'); tr.dataset.key = r.id; tr.tabIndex = 0;
+    tr.addEventListener('click', () => openCall(r.id, list));
+    tr.addEventListener('keydown', (e) => { if (e.key === 'Enter') openCall(r.id, list); });
+    return tr;
+  }
+  function drawOpen(calls) {
+    const {who, topic} = params();
+    const rows = calls.filter((r) => r.status === 'preliminary' && matchesWho(r, who) && (!topic || r.theme_label === topic)).sort((a, b) => (a.final_on < b.final_on ? -1 : 1));
+    navList.open = rows.map((r) => r.id);
+    $('#open-count').textContent = rows.length + (rows.length === 1 ? ' call' : ' calls');
+    $('#open-table tbody').replaceChildren(...rows.map((r) => {
+      const tr = clickableRow(r, 'open');
+      tr.append(td(fmtDay(r.final_on)), td(r.speaker), td(r.direction, 'dir uh-hide-sm'), td(r.subject, 'sub'), verdictCell(r.preliminary),
+        td(r.ret_now == null ? '' : fmtRet(r.ret_now) + '%', 'num ' + (r.ret_now > 0 ? 'v-win' : r.ret_now < 0 ? 'v-loss' : '')), td(fmtDay(r.date), 'uh-hide-sm'));
+      return tr;
+    }));
+  }
+  let sortKey = 'date', sortDir = -1;
+  $$('#ledger-table [data-sort]').forEach((b) => b.addEventListener('click', () => {
+    const k = b.dataset.sort; sortDir = sortKey === k ? -sortDir : k === 'date' ? -1 : 1; sortKey = k; render();
+  }));
+  ['#uh-q', '#uh-status', '#uh-verdict'].forEach((s) => $(s).addEventListener('input', () => render()));
+  function drawLedger(calls) {
+    const {who, topic} = params();
+    const q = $('#uh-q').value.trim().toLowerCase(), st = $('#uh-status').value, vd = $('#uh-verdict').value;
+    const rows = calls.filter((r) => matchesWho(r, who) && (!topic || r.theme_label === topic) && (!st || r.status === st) && (!vd || r.verdict === vd)
+      && (!q || [r.subject, r.speaker, r.notes, r.evidence, r.asset_label, r.theme_label, r.episode].some((t) => t && String(t).toLowerCase().includes(q))))
+      .sort((a, b) => sortDir * String(a[sortKey] ?? '').localeCompare(String(b[sortKey] ?? '')));
+    navList.ledger = rows.map((r) => r.id);
+    $$('#ledger-table th').forEach((th) => { const b = $('[data-sort]', th); th.setAttribute('aria-sort', b && b.dataset.sort === sortKey ? (sortDir > 0 ? 'ascending' : 'descending') : 'none'); });
+    $('#ledger-count').textContent = `${rows.length} of ${calls.length} calls`;
+    $('#ledger-table tbody').replaceChildren(...rows.map((r) => {
+      const tr = clickableRow(r, 'ledger');
+      tr.append(td(fmtDay(r.date)), td(r.speaker), td(r.direction, 'dir uh-hide-sm'), td(r.subject, 'sub'), td(r.asset_label, 'uh-hide-sm'), verdictCell(r.verdict),
+        el('td', {className: 'ev uh-hide-sm'}, el('span', {textContent: r.notes || ''})));
+      return tr;
+    }));
+  }
+
+  /* ---------- dialogs ---------- */
+  const dlgCall = $('#call'), dlgProfile = $('#profile');
+  for (const d of [dlgCall, dlgProfile]) {
+    $$('[data-close]', d).forEach((b) => b.addEventListener('click', () => d.close()));
+    d.addEventListener('click', (e) => { if (e.target === d) d.close(); });
+  }
+  let callNav = {list: [], i: -1};
+  function openCall(id, listName) {
+    const named = listName && navList[listName];
+    const list = named && named.includes(id) ? named.slice() : callNav.list.includes(id) ? callNav.list : [id];
+    callNav = {list, i: list.indexOf(id)};
+    showCall();
+    if (!dlgCall.open) dlgCall.showModal();
+    $('#cl-title').focus();
+  }
+  $('#cl-prev').addEventListener('click', () => { if (callNav.i > 0) { callNav.i -= 1; showCall(); } });
+  $('#cl-next').addEventListener('click', () => { if (callNav.i < callNav.list.length - 1) { callNav.i += 1; showCall(); } });
+  dlgCall.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft') $('#cl-prev').click(); if (e.key === 'ArrowRight') $('#cl-next').click(); });
+
+  function showCall() {
+    const id = callNav.list[callNav.i], i = DATA.idx.get(id), r = DATA.calls[i];
+    if (!r) return;
+    const M = (tag, field, text, cls) => mark(tag, 'calls', field, i, text === undefined ? r[field] : text, cls);
+    $('#cl-prev').disabled = callNav.i <= 0; $('#cl-next').disabled = callNav.i >= callNav.list.length - 1;
+    $('#cl-kicker').replaceChildren('Call made ', M('span', 'date', fmtDay(r.date)), callNav.list.length > 1 ? ` · ${callNav.i + 1} of ${callNav.list.length}` : '');
+    const who = r.role === 'unattributed' ? el('span', {textContent: 'Someone'}) : el('button', {type: 'button', className: 'uh-link'}, M('span', 'speaker'));
+    if (r.role !== 'unattributed') who.addEventListener('click', () => { dlgCall.close(); openProfile(r.speaker); });
+    $('#cl-title').replaceChildren(who, ' went ', M('span', 'direction'), ' ', M('span', 'subject'));
+
+    const body = [];
+    if (r.fame) {
+      const f = el('div', {className: 'uh-fame'}, el('b', {textContent: r.fame === 'hit' ? 'Hall of fame' : 'Hall of shame'}), M('span', 'fame_line'));
+      f.style.setProperty('--tone', r.fame === 'hit' ? 'var(--color-ok)' : 'var(--color-bad)');
+      body.push(f);
+    }
+    if (r.thread_id) {
+      const sibs = DATA.calls.filter((c) => c.thread_id === r.thread_id && c.id !== r.id).sort((a, b) => (a.date < b.date ? -1 : 1));
+      const t = el('div', {className: 'uh-fame'}, el('b', {}, KIND[r.thread_kind], ' · ', M('span', 'thread_title')), M('span', 'thread_line'),
+        el('div', {className: 'uh-people'}, ...sibs.map((c) => {
+          const b = el('button', {type: 'button', className: 'uh-chip', textContent: `${c.role === 'unattributed' ? 'Someone' : firstName(c.speaker)} ${c.direction === 'long' ? '▲' : '▼'} ${c.subject}`});
+          b.title = fmtDay(c.date);
+          b.addEventListener('click', () => openCall(c.id, 'thr-' + r.thread_id));
+          return b;
+        })));
+      t.style.setProperty('--tone', KIND_TONE[r.thread_kind]);
+      body.push(t);
+    }
+    const verdictBox = el('div', {className: 'uh-verdict v-' + (r.verdict || r.preliminary || 'unclear')});
+    const lines = [];
+    if (r.status === 'decided') {
+      lines.push(el('p', {}, 'Decided ', r.decided_on ? M('b', 'decided_on', fmtDay(r.decided_on)) : null, r.decided_on ? ' ' : null, 'by ', M('b', 'verdict_by')));
+      if (r.previous_verdict) lines.push(el('p', {}, 'Revised from ', M('b', 'previous_verdict'), ' on ', M('span', 'revised_on', fmtDay(r.revised_on)), ' after a fact-check.'));
+      if (r.early_resolution) lines.push(el('p', {}, M('span', 'early_resolution')));
+    } else if (r.status === 'preliminary') {
+      lines.push(el('p', {}, 'Preliminary, as of the last price pull. Settles on ', M('b', 'final_on', fmtDay(r.final_on)), '.'));
+    } else {
+      lines.push(el('p', {textContent: 'Too early to judge: calls wait 180 days (a year for market calls) unless an event settles them sooner.'}));
+    }
+    verdictBox.append(el('div', {className: 'big'}, r.status === 'decided' ? M('span', 'verdict') : r.status === 'preliminary' ? M('span', 'preliminary') : el('span', {textContent: 'Pending'})), el('div', {}, ...lines));
+    body.push(verdictBox);
+
+    const facts = el('dl', {className: 'uh-facts'});
+    const fact = (label, ...val) => { if (val.some((v) => v != null && v !== '')) facts.append(el('dt', {textContent: label}), el('dd', {}, ...val)); };
+    fact('Made on', M('span', 'date', fmtDay(r.date)));
+    if (r.episode) {
+      const ep = r.transcript_url ? el('a', {href: r.transcript_url, target: '_blank', rel: 'noopener'}, M('span', 'episode')) : M('span', 'episode');
+      fact('Episode', ep, r.transcript_url ? el('span', {className: 'uh-note', textContent: ' · FT transcript ↗'}) : null);
+    }
+    fact('Who', r.role === 'unattributed' ? 'Not identified' : M('span', 'speaker'), r.role === 'unattributed' ? null : ` · ${roleLabel(r.role)}`);
+    fact('Category', M('span', 'asset_label'), ' · ', M('span', 'theme_label'));
+    if (r.success_condition) fact('A win would mean', M('span', 'success_condition'));
+    fact('Judged by', M('span', 'method_label'));
+    if (r.proxy_note) fact('Measured with', M('span', 'proxy_note'));
+    if (r.evidence_from) fact('Evidence window', M('span', 'evidence_from', fmtDay(r.evidence_from)), ' → ', M('span', 'evidence_to', fmtDay(r.evidence_to)));
+    body.push(el('div', {className: 'uh-sec'}, el('h3', {textContent: 'The call'}), facts));
+
+    const rets = [['ret_3m', '3 months'], ['ret_6m', '6 months'], ['ret_1y', '1 year'], ['ret_now', 'To date']].filter(([f]) => r[f] != null);
+    if (rets.length) body.push(el('div', {className: 'uh-sec'}, el('h3', {textContent: 'Returns, signed for the call'}),
+      el('div', {className: 'uh-rets'}, ...rets.map(([f, l]) => el('div', {}, el('small', {textContent: l}), el('b', {className: r[f] > 0 ? 'v-win' : r[f] < 0 ? 'v-loss' : ''}, M('span', f, fmtRet(r[f])), '%'))))));
+    if (r.notes || r.evidence) {
+      const ev = el('div', {className: 'uh-sec'}, el('h3', {textContent: 'Evidence'}));
+      if (r.notes) ev.append(el('p', {className: 'uh-prose'}, M('span', 'notes')));
+      if (r.evidence && r.evidence !== r.notes) ev.append(el('p', {className: 'uh-prose'}, M('span', 'evidence')));
+      body.push(ev);
+    }
+    const srcs = [1, 2, 3, 4, 5].filter((n) => r[`source_${n}_url`]);
+    const list = el('ul', {className: 'uh-srcs'}, ...srcs.map((n) => el('li', {}, el('a', {href: r[`source_${n}_url`], target: '_blank', rel: 'noopener'}, M('span', `source_${n}_name`), el('small', {textContent: domain(r[`source_${n}_url`]) + ' ↗'})))));
+    if (r.transcript_url) list.append(el('li', {}, el('a', {href: r.transcript_url, target: '_blank', rel: 'noopener'}, el('span', {textContent: 'The episode transcript, where the call was made'}), el('small', {textContent: 'ft.com ↗'}))));
+    body.push(el('div', {className: 'uh-sec'}, el('h3', {textContent: srcs.length ? 'Sources' : 'Sources (no external source recorded for this verdict)'}), list));
+    $('#cl-body').replaceChildren(...body);
+    dlgCall.scrollTop = 0;
+  }
+
+  /* ---------- profiles ---------- */
+  let profileWho = null, profileStatus = 'all';
+  $('#pf-focus').addEventListener('click', () => { const c = cohById[profileWho]; dash.setParams({who: c ? profileWho : profileWho}); dlgProfile.close(); });
+  function openProfile(who) {
+    profileWho = who; profileStatus = 'all';
+    showProfile();
+    if (!dlgProfile.open) dlgProfile.showModal();
+    $('#pf-title').focus();
+    dlgProfile.scrollTop = 0;
+  }
+  function showProfile() {
+    if (!profileWho) return;
+    const cohort = cohById[profileWho];
+    const person = cohort ? cohort.person : profileWho;
+    const isGroup = !!cohort && !cohort.person;
+    const people = dash.data('people').data || [], cohorts = dash.data('cohorts').data || [];
+    const src = isGroup ? 'cohorts' : 'people';
+    const where = isGroup ? `cohort=${profileWho}` : `speaker=${enc(person)}`;
+    const row = isGroup ? cohorts.find((c) => c.cohort === profileWho) : people.find((p) => p.speaker === person);
+    if (!row) return;
+    const cid = isGroup ? profileWho : cohort ? cohort.id : groupOf({speaker: person, role: row.role});
+    const host = cid ? colorOf(cid) : 'var(--color-fg)';
+    dlgProfile.style.setProperty('--host', host);
+    $('#pf-kicker').textContent = isGroup ? cohort.role : roleLabel(row.role);
+    $('#pf-title').textContent = isGroup ? cohort.name : person;
+    $('#pf-focus').textContent = `Focus the page on ${isGroup ? cohort.short.toLowerCase() : firstName(person)}`;
+    const M = (tag, field) => mark(tag, src, field, where, row[field]);
+    const Md = (field) => mark('span', src, field, where, row[field] ? fmtDay(row[field]) : null);
+    const mine = DATA.calls.filter((c) => (isGroup ? groupOf(c) === profileWho : c.speaker === person));
+
+    const hero = el('div', {className: 'uh-pf-hero'},
+      el('div', {}, el('div', {className: 'uh-pf-big'}, M('span', 'hit'), el('span', {className: 'uh-unit', textContent: '%'})), el('p', {className: 'uh-note', textContent: 'hit rate on judged calls'})),
+      el('div', {className: 'uh-rec'}, M('span', 'wins'), ' won · ', M('span', 'losses'), ' lost · ', M('span', 'partials'), ' partial', el('br'), M('span', 'judged'), ' judged of ', M('span', 'calls'), ' calls · ', M('span', 'open'), ' open'),
+      el('div', {className: 'uh-rec'}, 'First call ', Md('first_date'), el('br'), 'Latest call ', Md('last_date')));
+
+    const splits = el('div', {className: 'uh-split'}, ...[['markets', 'Markets'], ['vibes', 'Everything else'], ['long', 'Going long'], ['short', 'Going short']].map(([f, l]) => {
+      const i = el('i'); i.style.width = row[f] == null ? '0' : row[f] + '%';
+      return el('div', {className: 'uh-split-row'}, el('span', {className: 'uh-split-l', textContent: l}), el('span', {className: 'uh-bar'}, i, el('em')), el('span', {className: 'uh-split-v'}, M('span', f), '%'));
+    }));
+    const edgeBits = row.best_theme ? el('p', {className: 'uh-edge'}, 'Strongest on ', M('b', 'best_theme'), ' (', M('span', 'best_hit'), '%)',
+      ...(row.worst_theme ? [', weakest on ', M('b', 'worst_theme'), ' (', M('span', 'worst_hit'), '%)'] : [])) : null;
+
+    const runBox = el('div', {className: 'uh-chart is-small'});
+    runBox.dataset.source = isGroup ? 'timeline' : 'speaker_timeline';
+    const tl = isGroup ? (dash.data('timeline').data || []).filter((t) => t.cohort === profileWho) : (dash.data('speaker_timeline').data || []).filter((t) => t.speaker === person);
+    const topicRows = isGroup ? (dash.data('theme_grid').data || []).filter((g) => g.cohort === profileWho && g.dim === 'topic').map((g) => ({topic: g.key, calls: g.calls, judged: g.judged, hit: g.hit}))
+      : (dash.data('edges').data || []).filter((e) => e.speaker === person);
+    const topicBox = el('div', {className: 'uh-bars'}, ...topicRows.sort((a, b) => b.calls - a.calls).map((t) => barRow(t.topic, t.judged ? t.hit : null, t.judged ? `${t.hit}% of ${t.judged}` : `${t.calls} not judged`, null)));
+    topicBox.dataset.source = isGroup ? 'theme_grid' : 'edges';
+
+    const callItem = (c, listName) => {
+      const right = el('span', {}, ret(c) != null ? el('span', {className: 'uh-note', textContent: fmtRet(ret(c)) + '%  '}) : null,
+        el('span', {className: 'uh-v v-' + (c.verdict || c.preliminary || 'unclear'), textContent: c.verdict || (c.preliminary ? c.preliminary + ' so far' : 'pending')}));
+      return el('li', {}, callButton(c, '', [el('span', {}, el('span', {textContent: `${c.direction} ${c.subject}`}), el('span', {className: 'when', textContent: `${fmtDay(c.date)}${isGroup ? ' · ' + c.speaker : ''}`})), right], listName));
+    };
+    const byFame = (a, b) => (b.fame ? 1 : 0) - (a.fame ? 1 : 0);
+    const wins = mine.filter((c) => c.verdict === 'win').sort((a, b) => byFame(a, b) || (ret(b) ?? -1e9) - (ret(a) ?? -1e9) || (a.date < b.date ? 1 : -1)).slice(0, 5);
+    const losses = mine.filter((c) => c.verdict === 'loss').sort((a, b) => byFame(a, b) || (ret(a) ?? 1e9) - (ret(b) ?? 1e9) || (a.date < b.date ? 1 : -1)).slice(0, 5);
+    navList['pf-best'] = wins.map((c) => c.id); navList['pf-worst'] = losses.map((c) => c.id);
+    const listCard = (title, note, items, listName) => {
+      const ul = el('ul', {className: 'uh-calllist'}, ...items.map((c) => callItem(c, listName))); ul.dataset.source = 'calls';
+      return el('section', {className: 'uh-card'}, el('h3', {textContent: title}), el('p', {className: 'uh-note', textContent: note}), items.length ? ul : el('p', {className: 'uh-note', textContent: 'None yet.'}));
+    };
+
+    const seg = el('div', {className: 'uh-seg'});
+    seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', 'Show');
+    for (const [v, l] of [['all', 'All'], ['decided', 'Decided'], ['preliminary', 'Open'], ['pending', 'Too early']]) {
+      const b = el('button', {type: 'button', textContent: l}); b.setAttribute('aria-pressed', String(profileStatus === v));
+      b.addEventListener('click', () => { profileStatus = v; showProfile(); }); seg.append(b);
+    }
+    const shown = mine.filter((c) => profileStatus === 'all' || c.status === profileStatus).sort((a, b) => (a.date < b.date ? 1 : -1));
+    navList.profile = shown.map((c) => c.id);
+    const table = el('table', {className: 'uh-table'});
+    table.dataset.source = 'calls'; table.dataset.rowKey = 'id';
+    const head = el('tr');
+    for (const [f, l, cls] of [['date', 'Date'], ...(isGroup ? [['speaker', 'Who']] : []), ['direction', 'Side', 'uh-hide-sm'], ['subject', 'Call'], ['theme_label', 'Topic', 'uh-hide-sm'], ['verdict', 'Verdict']]) {
+      const th = el('th', {textContent: l, className: cls || ''}); th.dataset.field = f; head.append(th);
+    }
+    table.append(el('thead', {}, head), el('tbody', {}, ...shown.map((c) => {
+      const tr = clickableRow(c, 'profile');
+      tr.append(td(fmtDay(c.date)), ...(isGroup ? [td(c.speaker)] : []), td(c.direction, 'dir uh-hide-sm'), td(c.subject, 'sub'), td(c.theme_label, 'uh-hide-sm'), verdictCell(c.verdict));
+      return tr;
+    })));
+
+    const body = [hero,
+      el('div', {className: 'uh-pf-grid'},
+        el('section', {className: 'uh-card'}, el('h3', {textContent: 'Running record'}), el('p', {className: 'uh-note', textContent: 'Wins minus losses, call by call. Click a dot to open that call.'}), runBox),
+        el('section', {className: 'uh-card'}, el('h3', {textContent: 'Where they bet'}), el('p', {className: 'uh-note', textContent: 'Topics by number of calls, with the hit rate on those judged.'}), topicBox),
+        el('section', {className: 'uh-card'}, el('h3', {textContent: 'How they bet'}), splits, edgeBits)),
+      el('div', {className: 'uh-pf-grid'},
+        listCard('Best calls', 'Hall-of-fame picks first, then wins by biggest return.', wins, 'pf-best'),
+        listCard('Worst calls', 'Hall-of-shame picks first, then losses by biggest drawdown.', losses, 'pf-worst')),
+    ];
+    if (isGroup) {
+      const members = people.filter((p) => groupOf(p) === profileWho).sort((a, b) => b.calls - a.calls);
+      const wrap = el('div', {className: 'uh-people'}, ...members.map((p) => { const b = el('button', {type: 'button', className: 'uh-chip', textContent: `${p.speaker} · ${p.calls}`}); b.addEventListener('click', () => openProfile(p.speaker)); return b; }));
+      wrap.dataset.source = 'people';
+      body.push(el('section', {className: 'uh-card'}, el('h3', {textContent: 'Who is in this group'}), el('p', {className: 'uh-note', textContent: 'Calls made by each. Click one for their profile.'}), wrap));
+    }
+    body.push(el('section', {className: 'uh-card'}, el('div', {className: 'uh-card-h'}, el('h3', {textContent: 'Every call'}), seg), el('div', {className: 'uh-tablebox'}, table)));
+    $('#pf-body').replaceChildren(...body);
+    requestAnimationFrame(() => lineChart(runBox, [{label: isGroup ? cohort.short : firstName(person), color: host, pts: tl.map((t) => ({...t, d: parse(t.date)}))}], 'net', {height: 230, dots: true, label: 'Running record'}));
+    if (!isGroup) Lab.focusOn(person);
+  }
+
+  /* ---------- the neural map (hand-rolled 3D) ---------- */
+  const Lab = (() => {
+    const box = $('#lab-map'), cv = $('canvas', box), ctx = cv.getContext('2d'), tip = $('.uh-labtip', box);
+    let nodes = [], links = [], byId = new Map(), stars = [], W = 0, H = 0;
+    let ay = 0.7, ax = -0.32, vy = 0, vx = 0, zoom = 1, spin = !reduce, drag = null, hover = null, visible = true, raf = 0, last = 0, built = null, target = null;
+    let focus = {who: 'all', topic: null};
+    const GOOD = [0, 153, 77], MID = [224, 138, 46], BAD = [204, 0, 0], GREY = [153, 145, 137];
+    const INK = [51, 48, 46], PAPER = [255, 247, 239];
+    const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+    const hitRGB = (h) => (h == null ? GREY : h < 50 ? mix(BAD, MID, Math.max(0, (h - 20) / 30)) : mix(MID, GOOD, Math.min(1, (h - 50) / 30)));
+    const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+    const FAM = () => getComputedStyle(box).fontFamily || 'system-ui, sans-serif';
+    const probe = document.createElement('canvas'); probe.width = probe.height = 1; const pctx = probe.getContext('2d', {willReadFrequently: true});
+    function toRGB(css) {
+      const s = el('span'); s.style.color = css; box.append(s); const c = getComputedStyle(s).color; s.remove();
+      pctx.clearRect(0, 0, 1, 1); pctx.fillStyle = '#000'; pctx.fillStyle = c; pctx.fillRect(0, 0, 1, 1);
+      const d = pctx.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2]];
+    }
+    let hostRGB = {};
+    const seeded = (s) => () => (s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296;
+
+    function build(people, edges) {
+      hostRGB = {katie: toRGB(colorOf('katie')), rob: toRGB(colorOf('rob')), team: toRGB(colorOf('team'))};
+      const topics = Array.from(d3.rollup(edges, (v) => ({calls: d3.sum(v, (e) => e.calls), judged: d3.sum(v, (e) => e.judged), pts: d3.sum(v, (e) => (e.hit == null ? 0 : e.hit * e.judged))}), (e) => e.topic));
+      nodes = [
+        ...topics.map(([t, a]) => ({id: 't:' + t, kind: 'topic', label: t, calls: a.calls, judged: a.judged, hit: a.judged ? Math.round(a.pts / a.judged) : null, r: 5 + Math.sqrt(a.calls) * 0.85})),
+        ...people.map((p) => ({id: 'p:' + p.speaker, kind: 'person', label: p.speaker, role: p.role, cohort: groupOf(p), calls: p.calls, judged: p.judged, hit: p.hit, wins: p.wins, losses: p.losses,
+          r: p.role === 'host' ? 8 + Math.sqrt(p.calls) * 1.05 : 2.6 + Math.sqrt(p.calls) * 1.5})),
+      ];
+      byId = new Map(nodes.map((n) => [n.id, n]));
+      const rnd = seeded(23);
+      links = edges.map((e) => ({s: byId.get('p:' + e.speaker), t: byId.get('t:' + e.topic), calls: e.calls, judged: e.judged, hit: e.hit, phase: rnd(), speed: 0.1 + rnd() * 0.16})).filter((l) => l.s && l.t);
+      const th = nodes.filter((n) => n.kind === 'topic');
+      th.forEach((n, i) => { const yy = 1 - (2 * (i + 0.5)) / th.length, rr = Math.sqrt(1 - yy * yy), a = i * 2.39996; n.x = Math.cos(a) * rr; n.y = yy; n.z = Math.sin(a) * rr; });
+      for (const n of nodes) if (n.kind === 'person') {
+        const ls = links.filter((l) => l.s === n), w = d3.sum(ls, (l) => l.calls) || 1;
+        for (const k of ['x', 'y', 'z']) n[k] = (d3.sum(ls, (l) => l.t[k] * l.calls) / w) * 0.6 + (rnd() - 0.5) * 0.3;
+      }
+      const N = nodes.length, IT = 320;
+      for (let it = 0; it < IT; it++) {
+        const a = 1 - it / IT;
+        for (let i = 0; i < N; i++) {
+          const p = nodes[i];
+          for (let j = i + 1; j < N; j++) {
+            const q = nodes[j]; let dx = p.x - q.x, dy = p.y - q.y, dz = p.z - q.z;
+            const f = (0.0016 * a) / (dx * dx + dy * dy + dz * dz + 0.004);
+            dx *= f; dy *= f; dz *= f; p.x += dx; p.y += dy; p.z += dz; q.x -= dx; q.y -= dy; q.z -= dz;
+          }
+        }
+        for (const l of links) {
+          const p = l.s, q = l.t, dx = q.x - p.x, dy = q.y - p.y, dz = q.z - p.z, d = Math.hypot(dx, dy, dz) || 1e-3;
+          const k = (0.035 * a * Math.min(1 + l.calls * 0.12, 2.5) * (d - 0.5)) / d;
+          p.x += dx * k; p.y += dy * k; p.z += dz * k; q.x -= dx * k * 0.1; q.y -= dy * k * 0.1; q.z -= dz * k * 0.1;
+        }
+        for (const n of nodes) {
+          const d = Math.hypot(n.x, n.y, n.z) || 1e-3;
+          const k = n.kind === 'topic' ? (0.12 * (1.1 - d)) / d : d > 1.2 ? ((1.2 - d) / d) * 0.25 : 0;
+          n.x += n.x * k; n.y += n.y * k; n.z += n.z * k;
+        }
+      }
+      const c = ['x', 'y', 'z'].map((k) => d3.mean(nodes, (n) => n[k]));
+      nodes.forEach((n) => { n.x -= c[0]; n.y -= c[1]; n.z -= c[2]; });
+      const R = d3.max(nodes, (n) => Math.hypot(n.x, n.y, n.z)) || 1;
+      nodes.forEach((n) => { n.x /= R; n.y /= R; n.z /= R; });
+      const sr = seeded(5);
+      stars = d3.range(260).map(() => { const u = sr() * 2 - 1, t = sr() * Math.PI * 2, rr = Math.sqrt(1 - u * u), R2 = 2.6 + sr() * 1.4; return {x: Math.cos(t) * rr * R2, y: u * R2, z: Math.sin(t) * rr * R2, b: 0.15 + sr() * 0.45, s: 0.4 + sr() * 0.9}; });
+    }
+    function resize() {
+      const r = box.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+      W = r.width; H = r.height; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    function lit() {
+      const set = new Set();
+      const add = (n) => { set.add(n.id); links.forEach((l) => { if (l.s === n) set.add(l.t.id); if (l.t === n) set.add(l.s.id); }); };
+      if (hover) { add(hover); return set; }
+      if (focus.who !== 'all') nodes.filter((n) => n.kind === 'person' && (cohById[focus.who] ? n.cohort === focus.who : n.label === focus.who)).forEach(add);
+      if (focus.topic) { const t = byId.get('t:' + focus.topic); if (t) add(t); }
+      return set.size ? set : null;
+    }
+    const cam = 3.1;
+    function proj(p, R) {
+      const cy = Math.cos(ay), sy = Math.sin(ay), cx = Math.cos(ax), sx = Math.sin(ax);
+      const x = p.x * cy - p.z * sy; let z = p.x * sy + p.z * cy; const y = p.y * cx - z * sx; z = p.y * sx + z * cx;
+      const s = cam / (cam + z); return [W / 2 + x * R * s, H / 2 + y * R * s, z, s];
+    }
+    const depthA = (z) => Math.max(0.16, Math.min(1, 0.6 + (0.8 - z) * 0.4));
+    function pill(text, x, y, alpha, weight, size) {
+      ctx.font = `${weight} ${size}px ${FAM()}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const w = ctx.measureText(text).width + 12, h = size + 8;
+      ctx.fillStyle = rgba(PAPER, 0.85 * alpha);
+      ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x - w / 2, y - h / 2, w, h, h / 2); else ctx.rect(x - w / 2, y - h / 2, w, h); ctx.fill();
+      ctx.fillStyle = rgba(INK, alpha); ctx.fillText(text, x, y + 0.5);
+    }
+    function draw(dt) {
+      ctx.clearRect(0, 0, W, H);
+      if (!nodes.length) return;
+      const R = Math.min(W, H) * 0.38 * zoom;
+      for (const st of stars) { const [px, py, , s] = proj(st, R * 0.55); if (s > 0) { ctx.fillStyle = rgba(INK, st.b * 0.35); ctx.fillRect(px, py, st.s, st.s); } }
+      for (const n of nodes) { const [px, py, pz, ps] = proj(n, R); n.px = px; n.py = py; n.pz = pz; n.ps = ps; }
+      const L = lit(), on = (n) => !L || L.has(n.id);
+      const ls = links.slice().sort((a, b) => b.s.pz + b.t.pz - (a.s.pz + a.t.pz));
+      ctx.lineCap = 'round';
+      for (const l of ls) {
+        const active = !L || (L.has(l.s.id) && L.has(l.t.id) && (hover ? l.s === hover || l.t === hover : true));
+        const c = hitRGB(l.judged ? l.hit : null), a = depthA((l.s.pz + l.t.pz) / 2) * (active ? (L ? 0.9 : 0.5) : 0.05);
+        const mx = (l.s.px + l.t.px) / 2, my = (l.s.py + l.t.py) / 2, cxp = mx + (mx - W / 2) * 0.18, cyp = my + (my - H / 2) * 0.18;
+        ctx.strokeStyle = rgba(c, a); ctx.lineWidth = (0.45 + Math.sqrt(l.calls) * 0.5) * Math.min(1.5, zoom) * (L && active ? 1.4 : 1);
+        ctx.beginPath(); ctx.moveTo(l.s.px, l.s.py); ctx.quadraticCurveTo(cxp, cyp, l.t.px, l.t.py); ctx.stroke();
+        if (!reduce && active && l.judged) {
+          l.phase = (l.phase + dt * l.speed) % 1; const t = l.phase, u = 1 - t;
+          const px = u * u * l.s.px + 2 * u * t * cxp + t * t * l.t.px, py = u * u * l.s.py + 2 * u * t * cyp + t * t * l.t.py;
+          ctx.fillStyle = rgba(c, Math.min(1, a * 2)); ctx.beginPath(); ctx.arc(px, py, 1.7, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      const labels = [];
+      for (const n of nodes.slice().sort((a, b) => b.pz - a.pz)) {
+        const da = depthA(n.pz) * (on(n) ? 1 : 0.16), r = n.r * n.ps * Math.sqrt(zoom);
+        if (n.kind === 'topic') {
+          ctx.strokeStyle = rgba(INK, 0.55 * da); ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.arc(n.px, n.py, r, 0, Math.PI * 2); ctx.stroke();
+          ctx.fillStyle = rgba(hitRGB(n.hit), 0.22 * da); ctx.fill();
+          labels.push([n.label.toUpperCase(), n.px, n.py - r - 10, da * 0.95, 600, 10]);
+        } else {
+          const c = hitRGB(n.judged ? n.hit : null);
+          const g = ctx.createRadialGradient(n.px, n.py, 0, n.px, n.py, r * 2.6);
+          g.addColorStop(0, rgba(c, 0.32 * da)); g.addColorStop(1, rgba(c, 0));
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(n.px, n.py, r * 2.6, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = rgba(c, 0.95 * da); ctx.beginPath(); ctx.arc(n.px, n.py, r, 0, Math.PI * 2); ctx.fill();
+          if (hostRGB[n.cohort] && (n.role === 'host' || n.role === 'team')) {
+            ctx.strokeStyle = rgba(hostRGB[n.cohort], da); ctx.lineWidth = n.role === 'host' ? 3 : 2;
+            ctx.beginPath(); ctx.arc(n.px, n.py, r + 4, 0, Math.PI * 2); ctx.stroke();
+          }
+          if (n === hover || (target && target.node === n)) { ctx.strokeStyle = rgba(INK, da); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(n.px, n.py, r + 8, 0, Math.PI * 2); ctx.stroke(); }
+          const show = n.role === 'host' || n === hover || focus.who === n.label || (L && L.has(n.id) && (n.role !== 'guest' || focus.who !== 'all' || focus.topic));
+          if (show) labels.push([n.role === 'host' ? `${firstName(n.label)} · ${n.hit}%` : n.label, n.px, n.py + r + (n.role === 'host' ? 18 : 13), da, n.role === 'host' ? 600 : 500, n.role === 'host' ? 12 : 11]);
+        }
+      }
+      for (const lb of labels) pill(...lb);
+    }
+    function loop(t) {
+      raf = 0;
+      const dt = last ? Math.min(0.05, (t - last) / 1000) : 0; last = t;
+      if (target && !target.done) {
+        const dy = Math.atan2(Math.sin(target.ay - ay), Math.cos(target.ay - ay));
+        ay += dy * Math.min(1, dt * 4); ax += (target.ax - ax) * Math.min(1, dt * 4);
+        if (Math.abs(dy) < 0.002 && Math.abs(target.ax - ax) < 0.002) target.done = true;
+      } else if (!drag) {
+        if (Math.abs(vy) > 0.0001 || Math.abs(vx) > 0.0001) { ay += vy; ax = Math.max(-1.3, Math.min(1.3, ax + vx)); vy *= 0.93; vx *= 0.93; }
+        else if (spin && !(target && focus.who !== 'all')) ay += dt * 0.11;
+      }
+      draw(dt);
+      if (visible && !reduce) raf = requestAnimationFrame(loop);
+    }
+    const kick = () => { if (!raf) { last = 0; raf = requestAnimationFrame(loop); } };
+    function pick(mx, my) {
+      let best = null, bd = Infinity;
+      for (const n of nodes) { const d = Math.hypot(n.px - mx, n.py - my), r = n.r * n.ps * Math.sqrt(zoom) + 6; if (d < r && n.pz < bd) { best = n; bd = n.pz; } }
+      return best;
+    }
+    function face(n) {
+      if (!n) { target = null; return; }
+      const tay = Math.atan2(-n.x, -n.z), zr = -Math.hypot(n.x, n.z);
+      target = {node: n, ay: tay, ax: Math.max(-1.1, Math.min(1.1, -Math.atan2(n.y, -zr)))};
+      if (reduce) { ay = target.ay; ax = target.ax; target.done = true; draw(0); } else kick();
+    }
+    function showTip(n, mx, my) {
+      if (!n) { tip.hidden = true; return; }
+      const lines = n.kind === 'topic'
+        ? [n.label, `${n.calls} calls · ${n.judged} judged${n.hit != null ? ' · ' + n.hit + '% hit rate' : ''}`, 'Click to filter the page by this topic']
+        : [n.label, `${roleLabel(n.role)} · ${n.calls} calls · ${n.judged} judged`, n.hit != null ? `${n.hit}% hit rate (${n.wins} won, ${n.losses} lost)` : 'Nothing judged yet', 'Click for their profile'];
+      tip.replaceChildren(el('b', {textContent: lines[0]}), ...lines.slice(1).map((t) => el('small', {textContent: t})));
+      tip.hidden = false;
+      tip.style.left = Math.max(6, Math.min(mx + 14, W - tip.offsetWidth - 6)) + 'px'; tip.style.top = Math.max(6, Math.min(my + 14, H - tip.offsetHeight - 6)) + 'px';
+    }
+    const pts = new Map(); let pinch = null;
+    box.addEventListener('pointerdown', (e) => {
+      pts.set(e.pointerId, [e.clientX, e.clientY]);
+      if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = {d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, z: zoom}; drag = null; return; }
+      drag = {x: e.clientX, y: e.clientY, ay, ax, moved: false, lx: e.clientX, ly: e.clientY}; target = null; vy = vx = 0;
+      box.classList.add('is-drag'); box.setPointerCapture(e.pointerId);
+    });
+    box.addEventListener('pointermove', (e) => {
+      if (pts.has(e.pointerId)) pts.set(e.pointerId, [e.clientX, e.clientY]);
+      if (pinch && pts.size === 2) { const [a, b] = [...pts.values()]; zoom = Math.max(0.55, Math.min(2.8, (pinch.z * Math.hypot(a[0] - b[0], a[1] - b[1])) / pinch.d)); if (reduce) draw(0); return; }
+      const r = box.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+      if (drag) {
+        const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+        if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
+        vy = (e.clientX - drag.lx) * 0.006; vx = (e.clientY - drag.ly) * 0.006; drag.lx = e.clientX; drag.ly = e.clientY;
+        ay = drag.ay + dx * 0.006; ax = Math.max(-1.3, Math.min(1.3, drag.ax + dy * 0.006));
+        tip.hidden = true;
+        if (reduce) draw(0);
+        return;
+      }
+      const n = pick(mx, my);
+      if (n !== hover) { hover = n; box.classList.toggle('is-point', !!n); if (reduce) draw(0); }
+      showTip(n, mx, my);
+    });
+    const end = (e) => {
+      pts.delete(e.pointerId); if (pts.size < 2) pinch = null;
+      if (!drag) return;
+      const moved = drag.moved; drag = null; box.classList.remove('is-drag');
+      if (reduce || !moved) { vy = vx = 0; }
+      if (moved || e.type === 'pointercancel') return;
+      const r = box.getBoundingClientRect(), n = pick(e.clientX - r.left, e.clientY - r.top);
+      if (!n) return;
+      if (n.kind === 'topic') dash.setParams({topic: focus.topic === n.label ? null : n.label});
+      else openProfile(n.label);
+    };
+    box.addEventListener('pointerup', end); box.addEventListener('pointercancel', end);
+    box.addEventListener('pointerleave', () => { hover = null; tip.hidden = true; box.classList.remove('is-point'); if (reduce) draw(0); });
+    box.addEventListener('wheel', (e) => { if (!e.ctrlKey) return; e.preventDefault(); zoom = Math.max(0.55, Math.min(2.8, zoom * Math.exp(-e.deltaY * 0.01))); reduce ? draw(0) : kick(); }, {passive: false});
+    $('#lab-spin').addEventListener('click', (e) => { spin = !spin; e.currentTarget.setAttribute('aria-pressed', String(spin)); kick(); });
+    if (reduce) $('#lab-spin').setAttribute('aria-pressed', 'false');
+    $('#lab-in').addEventListener('click', () => { zoom = Math.min(2.8, zoom * 1.2); reduce ? draw(0) : kick(); });
+    $('#lab-out').addEventListener('click', () => { zoom = Math.max(0.55, zoom / 1.2); reduce ? draw(0) : kick(); });
+    $('#lab-reset').addEventListener('click', () => { zoom = 1; ay = 0.7; ax = -0.32; vy = vx = 0; target = null; reduce ? draw(0) : kick(); });
+    new IntersectionObserver((es) => { visible = es[0].isIntersecting; if (visible) kick(); }, {root: document}).observe(box);
+    new ResizeObserver(() => { resize(); draw(0); }).observe(box);
+    let lastWho = 'all';
+    return {
+      update(people, edges, f) {
+        focus = f;
+        if (built !== edges) { built = edges; build(people, edges); resize(); }
+        if (f.who !== lastWho) {
+          lastWho = f.who;
+          const name = cohById[f.who] ? cohById[f.who].person : f.who !== 'all' ? f.who : null;
+          face(name ? byId.get('p:' + name) : null);
+        }
+        draw(0); kick();
+      },
+      focusOn(name) { const n = byId.get('p:' + name); if (n) face(n); },
+      fail() { ctx.clearRect(0, 0, W, H); },
+    };
+  })();
+
+  /* ---------- render ---------- */
+  function render() {
+    const get = (id) => dash.data(id);
+    const calls = get('calls'), cohorts = get('cohorts'), timeline = get('timeline'), grid = get('theme_grid'), people = get('people'), edges = get('edges'), totals = get('totals');
+    const bad = (d) => ['error', 'connect', 'declined', 'missing'].includes(d.status);
+    drawChips();
+    const root = $('#uh');
+    if (totals.status === 'ok') fillMarks(root, 'totals', totals.data, null);
+    if (cohorts.status === 'ok') {
+      fillMarks(root, 'cohorts', cohorts.data, 'cohort');
+      const k = cohorts.data.find((r) => r.cohort === 'katie'), r = cohorts.data.find((r) => r.cohort === 'rob');
+      $('.uh-lead').textContent = k && r && k.hit != null && r.hit != null ? (k.hit === r.hit ? 'Katie and Rob are dead level.' : `${k.hit > r.hit ? 'Katie' : 'Rob'} has the better record.`) : '';
+    }
+    if (calls.status === 'ok') {
+      DATA = {calls: calls.data, idx: new Map(calls.data.map((r, i) => [r.id, i]))};
+      drawTicker(calls.data); drawHall(calls.data); drawThreads(calls.data); drawOpen(calls.data); drawLedger(calls.data);
+      if (dlgCall.open) showCall();
+    }
+    if (cohorts.status === 'ok' && timeline.status === 'ok') drawCards(cohorts.data, timeline.data);
+    if (timeline.status === 'ok') drawLongRun(timeline.data); else if (bad(timeline)) failed($('#longrun-chart'));
+    if (grid.status === 'ok') drawHeat(grid.data); else if (bad(grid)) failed($('#edge-grid'));
+    if (people.status === 'ok') drawBench(people.data); else if (bad(people)) failed($('#bench-list'));
+    if (people.status === 'ok' && edges.status === 'ok') Lab.update(people.data, edges.data, params()); else if (bad(edges)) Lab.fail();
+    if (dlgProfile.open && people.status === 'ok' && cohorts.status === 'ok' && calls.status === 'ok') showProfile();
+  }
+  dash.onData(render);
+})();
+</script>
+
+</div>
+</body>
+</html>
